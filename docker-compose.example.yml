@@ -1,0 +1,30 @@
+# A household gateway, in one file.
+#
+#   1. cp .env.example .env      and fill in UPSTREAM_BASE_URL + UPSTREAM_API_KEY
+#   2. pnpm mint-token alex 50   for each member; paste the printed entry into
+#                                config/members.json and give the member the token
+#   3. docker compose -f docker-compose.example.yml up -d
+#
+# BIND IT TO YOUR LAN OR YOUR VPN, not to the open internet. The port mapping
+# below is deliberately bound to 127.0.0.1; change it to your tailnet address,
+# not to 0.0.0.0, unless you have put something in front of it.
+
+services:
+  gateway:
+    image: ghcr.io/lowcarbcheck/openplate-gateway:latest
+    # Or build it yourself:
+    # build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '127.0.0.1:3602:3602'
+    volumes:
+      # The members registry — token digests only. Read-only on purpose: the
+      # service never writes it, and a read-only mount makes that visible.
+      - ./config/members.json:/app/config/members.json:ro
+      # The daily counters. A named volume so `docker rm` cannot reset every
+      # member's allowance.
+      - gateway-state:/app/state
+
+volumes:
+  gateway-state:

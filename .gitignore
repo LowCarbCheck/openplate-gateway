@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+# Secrets and runtime state. `members.json` holds token digests and
+# `quota-store.json` holds who spent what — neither belongs in git, and the
+# `.example` files are the committed templates.
+.env
+members.json
+quota-store.json
+*.log
+
+# Agent scratch. `agent-memory` is internal working notes, not project
+# documentation, and this repository is public.
+.claude/agent-memory/
+.claude/worktrees/

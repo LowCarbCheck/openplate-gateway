@@ -1,0 +1,35 @@
+{
+  "name": "openplate-gateway",
+  "version": "0.1.0",
+  "description": "Share one AI provider key across a household or a hosted tier \u2014 an OpenAI-compatible proxy with per-member tokens, hard daily quotas, and no request-body logging.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "mint-token": "tsx scripts/mint-token.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "undici": "8.10.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.24.2",
+    "oxlint": "1.78.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

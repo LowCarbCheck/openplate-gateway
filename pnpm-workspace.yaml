@@ -1,0 +1,24 @@
+# pnpm settings live HERE, not in package.json's `pnpm` field — pnpm 11 no
+# longer reads that field at all and only warns about it, so a setting left
+# there is silently inert.
+
+packages: []
+
+# Postinstall scripts are blocked by default. Only esbuild needs one: it
+# downloads and links its platform binary. This service deliberately has no
+# native runtime dependency — nothing else here builds.
+allowBuilds:
+  esbuild: true
+
+# Supply-chain hardening: a published version must be at least 7 days old
+# before pnpm will resolve it. Only affects RESOLUTION; `--frozen-lockfile`
+# installs (CI, Docker builds) are unaffected. This repo ships publicly and
+# every dependency is a surface a self-hoster inherits.
+minimumReleaseAge: 10080
+
+# `vite` (via `vitest`) pins an esbuild range we do not control, and a fresh
+# release inside it would reject the whole lockfile. esbuild is build-time
+# only, so it is excluded rather than weakening the policy for runtime deps.
+minimumReleaseAgeExclude:
+  - esbuild
+  - '@esbuild/*'

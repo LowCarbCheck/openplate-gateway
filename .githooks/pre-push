@@ -1,0 +1,63 @@
+#!/usr/bin/env sh
+# Pre-push quality gate — this repo's ONLY test gate (no cloud CI).
+#
+# Pushes to main are what trigger a release build, so the gate belongs in front
+# of the push rather than after it.
+#
+# Runs: lint -> typecheck -> unit tests -> production build.
+#
+# THE BUILD TIER IS LOAD-BEARING, and for a reason specific to this repo.
+# `scripts/build.ts` asserts that the emitted bundle contains no esbuild
+# dynamic-require shim. Nothing else can catch that: typecheck passes, the
+# tests run TypeScript SOURCES and never touch `dist/`, and esbuild itself
+# reports success — so an inlined CommonJS dependency produces a bundle that
+# throws on its first line at runtime and looks green everywhere else.
+#
+# Escape hatch (use deliberately, it pushes unverified code):
+#   SKIP_TESTS=1 git push        skip the whole gate
+set -e
+
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+  echo "⚠ pre-push: gate SKIPPED explicitly (SKIP_TESTS=1)"
+  exit 0
+fi
+
+# Branch/tag deletions push no content — nothing to test. stdin gives one line
+# per ref: "<local_ref> <local_sha> <remote_ref> <remote_sha>"; an all-zero
+# local_sha means "delete this remote ref".
+has_content=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    '' | *[!0]*) has_content=1 ;;
+  esac
+done
+if [ "$has_content" = "0" ]; then
+  echo "▶ pre-push: deletion-only push, no tests to run"
+  exit 0
+fi
+
+# TS commands need the ts-dev toolbox (the host lacks native build tools), but
+# must run bare when the hook itself is already executing inside a container.
+if [ -f /run/.containerenv ] || [ -f /.dockerenv ]; then
+  run() { CI=true "$@"; }
+elif command -v toolbox >/dev/null 2>&1; then
+  run() { toolbox run -c ts-dev env CI=true "$@"; }
+else
+  echo "✖ pre-push: no ts-dev toolbox and not inside a container — cannot run the gate."
+  echo "  Install the toolbox, or bypass once with: SKIP_TESTS=1 git push"
+  exit 1
+fi
+
+echo "▶ pre-push: lint"
+run pnpm lint
+
+echo "▶ pre-push: typecheck"
+run pnpm typecheck
+
+echo "▶ pre-push: unit tests"
+run pnpm test
+
+echo "▶ pre-push: production build (esbuild + the dynamic-require assertion)"
+run pnpm build
+
+echo "✅ pre-push: all gates passed"
