@@ -1,0 +1,149 @@
+# A household with its own hardware: openplate + your own model + per-member limits.
+#
+# WHO THIS IS FOR
+# One family, one box with a GPU (or a patient CPU), and a wish to stop any one
+# person from running the machine flat. openplate-inference serves the vision
+# model. The gateway sits in front of it and hands each member their own token
+# with a hard daily request cap. Nothing leaves the house, and no provider bill
+# exists at all.
+#
+#   1. cp ../../.env.example ../../.env    and set UPSTREAM_BASE_URL +
+#                                          UPSTREAM_API_KEY to the two values
+#                                          marked EDIT ME (1/3) and (2/3) below
+#   2. pnpm mint-token alex 50             for each member; paste the printed
+#                                          entry into config/members.json and
+#                                          give that member the token
+#   3. docker compose -f docker/topologies/compose.household.yml up -d
+#
+# Paths are relative to THIS file, so `../../` is the repository root.
+#
+# ── THE ONE THING PEOPLE GET WRONG ─────────────────────────────────────────
+# The openplate client calls the AI endpoint DIRECTLY from the browser — the
+# photo goes from the phone to the endpoint and openplate's server is never in
+# the loop. So the address openplate hands to browsers must be an address a
+# BROWSER can open, and in this topology it must be the GATEWAY's address, not
+# the inference container's. That is the entire point: the browser presents a
+# MEMBER's token to the gateway, the gateway presents the one shared inference
+# key upstream, and the daily cap is counted per member on the way through.
+#
+# Consequence: `inference` needs no published port at all. It is reached only
+# by the gateway, over the compose network, so it uses `expose:` rather than
+# `ports:` and is unreachable from the LAN.
+#
+# BIND IT TO YOUR LAN OR YOUR VPN, not to the open internet. The two published
+# ports below are on 0.0.0.0 because phones on the house wifi have to reach
+# them. Do not forward either of them through your router.
+
+# Pinned so the stack is not named after the directory this file happens to
+# live in. With `-f docker/...` compose would otherwise derive the project
+# name from that folder ("docker", "topologies") and prefix the named
+# volumes with it — the counters would end up in `docker_gateway-state`.
+name: openplate-household
+
+services:
+  inference:
+    image: ghcr.io/lowcarbcheck/openplate-inference:latest
+    restart: unless-stopped
+    expose:
+      # NOT `ports:`. Only the gateway talks to this service; browsers talk to
+      # the gateway. Publishing 8300 would let anyone on the LAN skip the
+      # gateway entirely and spend the household's capacity with no quota.
+      - '8300'
+    volumes:
+      # Weights land here on first boot and are verified by sha256 on every
+      # start. Named, so `docker compose down` does not throw the download away.
+      - inference-models:/models
+    environment:
+      # lite | lite-apache | quality — see openplate-inference's README.
+      MODEL_PROFILE: lite
+      # ── EDIT ME (1/3) ── the shared key the GATEWAY presents upstream. No
+      # member ever sees it. Any random string: openssl rand -base64 24
+      API_KEYS: 'opk_CHANGE_ME'
+      # Self-host has no latency ceiling. 0 = never shed load for being slow.
+      LATENCY_CEILING_MS: '0'
+      CONCURRENCY: '2'
+      FOOD_SOURCE: fdc
+    # ── GPU (the `quality` profile) ── uncomment and switch the image to the
+    # -cuda base. The entrypoint detects the GPU and offloads every layer.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  gateway:
+    image: ghcr.io/lowcarbcheck/openplate-gateway:latest
+    # Or build it yourself:
+    # build: ../..
+    restart: unless-stopped
+    depends_on:
+      - inference
+    ports:
+      # Published on 0.0.0.0 so household devices can reach it. This is the
+      # only AI address any browser is given.
+      - '3602:3602'
+    environment:
+      # The upstream is the inference container, over the compose network. A
+      # container hostname is correct HERE — this hop is server to server.
+      UPSTREAM_BASE_URL: 'http://inference:8300/v1'
+      # ── EDIT ME (2/3) ── must match one of the inference API_KEYS above.
+      UPSTREAM_API_KEY: 'opk_CHANGE_ME'
+      # The image already sets these to the paths mounted below, but
+      # `.env.example` ships repo-relative defaults, and an env_file BEATS the
+      # image's own ENV — so a copied .env silently moves both files inside the
+      # container. Pinned here so the mounts below cannot be defeated.
+      MEMBERS_FILE: '/app/config/members.json'
+      QUOTA_STORE_FILE: '/app/state/quota-store.json'
+      # A local model costs electricity, not credits, so the burst guard can be
+      # looser than it would be in front of a metered provider. The daily quota
+      # in members.json is still the real limit.
+      RATE_LIMIT_PER_MINUTE: '30'
+      LOG_LEVEL: info
+    volumes:
+      # The members registry — token digests only. Read-only on purpose: the
+      # service never writes it, and a read-only mount makes that visible.
+      - ../../config/members.json:/app/config/members.json:ro
+      # The daily counters. A named volume so `docker rm` cannot reset every
+      # member's allowance.
+      - gateway-state:/app/state
+
+  openplate:
+    image: ghcr.io/lowcarbcheck/openplate:latest
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    ports:
+      - '3000:3000'
+    environment:
+      # ── EDIT ME (3/3) ── this host's address on your LAN or tailnet, and the
+      # same host in the gateway URL below. See openplate's .env.example for
+      # the rest of its settings (database, session secret…).
+      APP_URL: 'http://openplate.example.lan:3000'
+
+      # The instance preset: what turns into openplate's one-tap "This openplate
+      # provides its own AI" card. It must be BROWSER-reachable, and it points
+      # at the GATEWAY (port 3602), never at http://inference:8300/v1.
+      # openplate adds this origin to its production CSP connect-src for you.
+      DEFAULT_INFERENCE_BASE_URL: 'http://openplate.example.lan:3602/v1'
+      DEFAULT_INFERENCE_MODEL: 'openplate-plate-1'
+
+      # DEFAULT_INFERENCE_API_KEY is deliberately LEFT UNSET here, and that is
+      # the whole design of this topology. openplate embeds that key in the
+      # HTML it sends to every browser, so baking one in would hand every
+      # visitor the same token — and one shared token has one shared quota,
+      # which is exactly the per-member accounting the gateway exists to
+      # provide. Members must be told apart, so each member pastes their OWN
+      # token instead.
+      #
+      # What that means in the app: the "This openplate provides its own AI"
+      # card still renders (the base URL alone is the gate), and one tap saves
+      # the gateway's base URL with an EMPTY key. Each member then opens
+      # Settings → AI and types their own token into the API key field. Until
+      # they do, the gateway answers 401 — which is the correct answer to an
+      # unidentified caller.
+
+volumes:
+  inference-models:
+  gateway-state:

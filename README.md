@@ -58,10 +58,11 @@ pnpm install
 pnpm mint-token alex 50     # member id, requests per day
 ```
 
-Paste the printed entry into `members.json` (start from `members.example.json`), then:
+Paste the printed entry into `config/members.json` (start from `members.example.json` —
+`mkdir -p config && cp members.example.json config/members.json`), then:
 
 ```bash
-docker compose -f docker-compose.example.yml up -d
+docker compose -f docker/compose.yml up -d
 ```
 
 Each member opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
@@ -71,6 +72,16 @@ provider, and enters:
 - **API key** — that member's token
 
 That is the whole setup.
+
+## Topologies
+
+Three compose files, one per shape. Pick one; they are alternatives, not layers.
+
+| File | Shape |
+|---|---|
+| [`docker/compose.yml`](docker/compose.yml) | The gateway on its own. Point `UPSTREAM_BASE_URL` at whatever you already use. |
+| [`docker/topologies/compose.household.yml`](docker/topologies/compose.household.yml) | A family with one GPU/CPU box: openplate + [openplate-inference](https://github.com/LowCarbCheck/openplate-inference) + the gateway in front of it. No provider bill at all. |
+| [`docker/topologies/compose.hosted.yml`](docker/topologies/compose.hosted.yml) | No hardware: the gateway alone in front of a managed provider. The household shares one bill; per-member daily limits still apply. |
 
 ## Where to run it
 
@@ -111,6 +122,7 @@ the day again with a full allowance.
 ## Development
 
 ```bash
+nix develop       # optional — node 22 + pnpm, no global install
 pnpm install
 pnpm dev          # tsx watch
 pnpm typecheck

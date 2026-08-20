@@ -1,0 +1,50 @@
+# A household gateway, in one file.
+#
+#   1. cp .env.example .env      and fill in UPSTREAM_BASE_URL + UPSTREAM_API_KEY
+#   2. pnpm mint-token alex 50   for each member; paste the printed entry into
+#                                config/members.json and give the member the token
+#   3. docker compose -f docker/compose.yml up -d
+#
+# Paths below are relative to THIS file, so `../` is the repository root — that
+# is where `.env` and `config/members.json` live.
+#
+# BIND IT TO YOUR LAN OR YOUR VPN, not to the open internet. The port mapping
+# below is deliberately bound to 127.0.0.1; change it to your tailnet address,
+# not to 0.0.0.0, unless you have put something in front of it.
+#
+# Two other shapes of the same idea live in docker/topologies/:
+#   compose.household.yml  gateway + your own openplate-inference + openplate
+#   compose.hosted.yml     gateway alone, in front of a managed provider
+
+# Pinned so the stack is not named after the directory this file happens to
+# live in. With `-f docker/...` compose would otherwise derive the project
+# name from that folder ("docker", "topologies") and prefix the named
+# volumes with it — the counters would end up in `docker_gateway-state`.
+name: openplate-gateway
+
+services:
+  gateway:
+    image: ghcr.io/lowcarbcheck/openplate-gateway:latest
+    # Or build it yourself:
+    # build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      # The image already sets these to the paths mounted below, but `.env.example`
+      # ships repo-relative defaults, and env_file BEATS the image's own ENV — so a
+      # copied .env silently moves both files inside the container. Pinned here so
+      # the mounts below cannot be defeated by a stray line in .env.
+      MEMBERS_FILE: '/app/config/members.json'
+      QUOTA_STORE_FILE: '/app/state/quota-store.json'
+    ports:
+      - '127.0.0.1:3602:3602'
+    volumes:
+      # The members registry — token digests only. Read-only on purpose: the
+      # service never writes it, and a read-only mount makes that visible.
+      - ../config/members.json:/app/config/members.json:ro
+      # The daily counters. A named volume so `docker rm` cannot reset every
+      # member's allowance.
+      - gateway-state:/app/state
+
+volumes:
+  gateway-state:

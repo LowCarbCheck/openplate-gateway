@@ -107,7 +107,7 @@ Repeat for each person.
 
 ```bash
 mkdir -p config && cp members.json config/members.json
-docker compose -f docker-compose.example.yml up -d
+docker compose -f docker/compose.yml up -d
 ```
 
 **Run it on your home network or your VPN.** The example binds to `127.0.0.1` deliberately.

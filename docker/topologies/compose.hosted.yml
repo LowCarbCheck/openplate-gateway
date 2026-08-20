@@ -1,0 +1,79 @@
+# A household with no hardware: the gateway in front of a managed provider.
+#
+# WHO THIS IS FOR
+# Nobody in the house wants to run a model, and one person is happy to pay the
+# provider bill. That person holds ONE provider key, the gateway holds it for
+# them, and each member gets their own token with a hard daily request cap.
+# Members never see the key, and revoking one member does not disturb the rest.
+# This is the whole system: one service, no model, no database.
+#
+#   1. cp ../../.env.example ../../.env    and fill in UPSTREAM_BASE_URL +
+#                                          UPSTREAM_API_KEY (the payer's real
+#                                          provider key)
+#   2. pnpm mint-token alex 50             for each member; paste the printed
+#                                          entry into config/members.json and
+#                                          give that member the token
+#   3. docker compose -f docker/topologies/compose.hosted.yml up -d
+#
+# Paths are relative to THIS file, so `../../` is the repository root — that is
+# where `.env` and `config/members.json` live.
+#
+# ── DO YOU EVEN NEED THIS? ─────────────────────────────────────────────────
+# If your provider is OpenRouter, you do not need the gateway. OpenRouter
+# already issues sub-keys with their own credit limits. Mint one per family
+# member in the OpenRouter dashboard, give each member their sub-key, and you
+# are finished in five minutes with no server to run. See docs/family-setup.md.
+#
+# Run this shape when your provider is Mistral or anything else without per-key
+# spend limits, or when you want per-member DAILY REQUEST caps rather than
+# per-key credit caps.
+#
+# ── TWO CAPS, AND YOU WANT BOTH ────────────────────────────────────────────
+# The gateway counts requests, not currency. Put a hard spend cap on the
+# upstream key at the provider as well — only the provider can stop the money.
+#
+# BIND IT TO YOUR LAN OR YOUR VPN, not to the open internet. The port mapping
+# below is deliberately bound to 127.0.0.1; change it to your tailnet address,
+# not to 0.0.0.0, unless you have put something in front of it. A gateway on
+# the open internet is a spend endpoint protected by one bearer token: the
+# per-member daily quota limits the damage of a leaked token, it does not
+# prevent one.
+
+# Pinned so the stack is not named after the directory this file happens to
+# live in. With `-f docker/...` compose would otherwise derive the project
+# name from that folder ("docker", "topologies") and prefix the named
+# volumes with it — the counters would end up in `docker_gateway-state`.
+name: openplate-gateway-hosted
+
+services:
+  gateway:
+    image: ghcr.io/lowcarbcheck/openplate-gateway:latest
+    # Or build it yourself:
+    # build: ../..
+    restart: unless-stopped
+    # Everything is in .env — including the payer's key, which is why it is a
+    # file and not an `environment:` block in a committed compose file.
+    #
+    #   UPSTREAM_BASE_URL=https://api.mistral.ai/v1
+    #   UPSTREAM_API_KEY=<the payer's real provider key>
+    env_file: ../../.env
+    environment:
+      # The image already sets these to the paths mounted below, but `.env.example`
+      # ships repo-relative defaults, and env_file BEATS the image's own ENV — so a
+      # copied .env silently moves both files inside the container. Pinned here so
+      # the mounts below cannot be defeated by a stray line in .env.
+      MEMBERS_FILE: '/app/config/members.json'
+      QUOTA_STORE_FILE: '/app/state/quota-store.json'
+    ports:
+      - '127.0.0.1:3602:3602'
+    volumes:
+      # The members registry — token digests only. Read-only on purpose: the
+      # service never writes it, and a read-only mount makes that visible.
+      - ../../config/members.json:/app/config/members.json:ro
+      # The daily counters. A named volume so `docker rm` cannot reset every
+      # member's allowance. MUST be durable: lose this file and every member
+      # starts the day again with a full allowance.
+      - gateway-state:/app/state
+
+volumes:
+  gateway-state:
