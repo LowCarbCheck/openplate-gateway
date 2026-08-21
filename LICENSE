@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers the CODE in this repository only. The model weights this
-service downloads at first boot are third-party works under their own licenses
-— notably LFM2.5-VL-1.6B, which carries a revenue-capped commercial-use
-condition that binds YOU as the operator. See the "Licensing" section of
-README.md before running this in a business.

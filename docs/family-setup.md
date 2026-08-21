@@ -97,16 +97,21 @@ The first argument is a short id that will appear in your logs. The second is ho
 requests that person gets per day.
 
 This prints the token **once**. It is not stored and not recoverable — if it is lost, mint a
-new one. It also prints a JSON block; paste that into `members.json` (copy
-`members.example.json` to start). The file holds only a digest of the token, so someone who
-reads it still cannot use it.
+new one. It also prints a JSON block. Create the members file from the committed template,
+then paste that block into it:
+
+```bash
+mkdir -p config && cp members.example.json config/members.json
+# edit config/members.json — paste the entry that mint-token printed
+```
+
+The file holds only a digest of the token, so someone who reads it still cannot use it.
 
 Repeat for each person.
 
 ### 3. Start it
 
 ```bash
-mkdir -p config && cp members.json config/members.json
 docker compose -f docker/compose.yml up -d
 ```
 

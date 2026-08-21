@@ -1,0 +1,93 @@
+name: Release Image
+
+# Builds and publishes the self-host image to GHCR.
+#
+#   ghcr.io/lowcarbcheck/openplate-gateway  ->  :latest, :<semver>, :sha-<short>
+#
+# One Dockerfile, one variant. Unlike the sibling openplate-inference there is
+# no model runtime and no GPU stack here, so there is nothing to select with a
+# base-image build-arg — this is a plain Node image.
+#
+# The `:latest` and `:<semver>` tags are what README "Quickstart" and
+# docker/compose.yml tell people to pull, so neither may be dropped without
+# editing those first.
+#
+# Publishing semver WITHOUT moving a tag: run this workflow manually with the
+# `version` input set (e.g. 0.1.0). The semver tag is then applied to whatever
+# the current ref already points at. Pushing a `v*` tag does the same thing
+# automatically for future releases.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional semver to tag this build with (e.g. 0.1.0). Leave empty for latest + sha tags only.'
+        required: false
+        default: ''
+
+# One release build at a time per ref. Queued runs wait rather than cancel — a
+# release build must not be killed by the next merge.
+concurrency:
+  group: release-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # arm64 is not optional here: the deployment this project actually has is
+      # a Raspberry-Pi-class box on the home network.
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derived, never hardcoded: the org has already moved once
+      # (SPRQVNTRS -> LowCarbCheck) and GHCR rejects uppercase paths.
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -58,10 +58,12 @@ pnpm install
 pnpm mint-token alex 50     # member id, requests per day
 ```
 
-Paste the printed entry into `config/members.json` (start from `members.example.json` —
-`mkdir -p config && cp members.example.json config/members.json`), then:
+Create the members file from the committed template, paste the printed entry into it,
+then start the gateway:
 
 ```bash
+mkdir -p config && cp members.example.json config/members.json
+# edit config/members.json — paste the entry that mint-token printed
 docker compose -f docker/compose.yml up -d
 ```
 
