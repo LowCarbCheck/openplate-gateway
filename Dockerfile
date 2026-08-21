@@ -29,6 +29,10 @@ RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.json ./
 COPY src ./src
+# `pnpm build` is `tsx scripts/build.ts` — the bundler lives in scripts/, so it
+# has to be in the context too. Without it the build stage dies with
+# ERR_MODULE_NOT_FOUND on /app/scripts/build.ts.
+COPY scripts ./scripts
 RUN pnpm build
 
 # ---------------------------------------------------------------------------
