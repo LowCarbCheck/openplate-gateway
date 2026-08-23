@@ -29,7 +29,14 @@ export type UpstreamScenario =
   /** A non-2xx with a body we control. */
   | { kind: 'status'; status: number; body?: unknown }
   /** A non-2xx whose body QUOTES the request it was sent, verbatim. */
-  | { kind: 'echo'; status: number };
+  | { kind: 'echo'; status: number }
+  /**
+   * A server-sent-events stream, the shape `stream: true` really produces.
+   * Org mode records `responseText: null` for these on purpose — see
+   * `org-proxy.ts` — so a test needs a response that is genuinely SSE rather
+   * than JSON with a hopeful content type.
+   */
+  | { kind: 'sse'; frames?: readonly string[] };
 
 export interface RecordedUpstreamRequest {
   /** The raw `Authorization` header, or `null` when none was sent. */
@@ -79,6 +86,18 @@ export async function startFakeUpstream(
 
     if (scenario.kind === 'ok') {
       res.status(200).json(scenario.body ?? DEFAULT_COMPLETION);
+      return;
+    }
+    if (scenario.kind === 'sse') {
+      const frames = scenario.frames ?? [
+        'data: {"choices":[{"delta":{"content":"rice"}}]}',
+        'data: {"choices":[{"delta":{"content":", chicken"}}]}',
+        'data: [DONE]',
+      ];
+      res.status(200);
+      res.setHeader('Content-Type', 'text/event-stream');
+      for (const frame of frames) res.write(`${frame}\n\n`);
+      res.end();
       return;
     }
     if (scenario.kind === 'status') {

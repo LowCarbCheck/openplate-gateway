@@ -13,6 +13,14 @@ can revoke one member without disturbing the others.
 you can switch on, and there is a test that proves it. This repository exists partly so you
 can check that claim yourself rather than take it on trust.
 
+**It also never *stores* one — unless you deliberately turn on organisation mode.**
+`ORG_MODE=true` is an opt-in for organisations (a clinic, a care home) that are accountable
+for what is submitted through them: it stores submitted images in your own S3-compatible
+bucket and keeps an audit trail. It is off by default, it fails loudly if half-configured,
+it re-consents every member when you enable it, and a family gateway constructs none of it.
+See [docs/org-mode.md](docs/org-mode.md) and
+[ADR-0003](docs/adr/0003-organization-mode-amends-the-no-body-logging-guarantee.md).
+
 ## Do you actually need this?
 
 Probably not, and it is worth two minutes to find out.
@@ -31,8 +39,8 @@ per-member *daily request* caps rather than per-key credit caps.
 
 - It does not touch anyone's food diary. openplate keeps diaries on the device; the gateway
   carries AI requests only. Members of a household share spend, not data.
-- It is not an accounts system. There is no signup, no user table and no admin API —
-  members live in a JSON file the operator edits.
+- It is not an accounts system. There is no signup and no user table — members are added by
+  an invite from the operator, or by editing the member store directly.
 - It does not add a model. It forwards to a provider you choose.
 
 ## Quickstart
@@ -114,12 +122,35 @@ Every variable is documented in [`.env.example`](.env.example). The two required
 The quota counter file **must** be on durable storage. If it is lost, every member starts
 the day again with a full allowance.
 
+## Inviting members
+
+Set `GATEWAY_ADMIN_TOKEN` and the gateway grows an admin API for adding and removing people
+without editing files or restarting anything — leave it unset and `/admin` answers "no such
+endpoint" to everybody, exactly like the rest of this gateway's opt-in surfaces. The primary
+way to use it is the bundled admin page at `/admin/ui`: sign in with the token, list members
+and invites, create an invite, and copy the link. Everything it does is also a plain `curl`
+call, for scripting. See [docs/family-setup.md](docs/family-setup.md) for the full walk-through,
+including the openplate side: an invite link opens `/connect-gateway` in the client and the
+member is connected with nothing to paste.
+
+## Organisation mode
+
+Off by default, and it is meant to stay off for a household. `ORG_MODE=true` turns this into
+an audited gateway for organisations — a clinic, a care home — that are accountable for what
+is submitted through them: it stores every submitted image in your own S3-compatible bucket
+and keeps an admin-readable, exportable, erasable audit trail with a retention period you set.
+It is not a substitute for a DPA or a compliance programme — see
+[docs/org-mode.md](docs/org-mode.md) for what it changes, what it does not give you, and its
+known limitations.
+
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | `POST` | `/v1/chat/completions` | member token | The proxy. Streaming is passed through. |
 | `GET` | `/healthcheck` | none | Liveness. |
+| `GET` | `/admin/ui` | admin token | The bundled admin page — members, invites, links. |
+| `*` | `/admin/*` | admin token | The admin API `/admin/ui` is built on. 404 if `GATEWAY_ADMIN_TOKEN` is unset. See docs/family-setup.md and docs/org-mode.md. |
 
 ## Development
 

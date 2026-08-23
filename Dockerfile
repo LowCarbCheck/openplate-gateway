@@ -59,11 +59,21 @@ COPY --from=build     /app/dist         /app/dist
 COPY --from=prod-deps /app/node_modules /app/node_modules
 COPY package.json /app/package.json
 
-# Both paths are resolved against the process CWD, i.e. this WORKDIR. Mount the
-# members file read-only and the quota file on a volume.
+# Every path is resolved against the process CWD, i.e. this WORKDIR.
+#
+# THE THREE WRITABLE STORES ALL LIVE ON /app/state, the declared VOLUME below.
+# The quota file guards the bill; the member store IS the roster, and losing it
+# revokes everybody; the invite store holds outstanding invitations. None may sit
+# on the container's writable layer, where `docker rm` takes them.
+#
+# MEMBERS_FILE is the LEGACY hand-edited registry, read once and folded into the
+# member store on first boot (ADR-0002). An installation that never had one
+# leaves it unmounted, and the gateway starts normally.
 ENV PORT=3602 \
     MEMBERS_FILE=/app/config/members.json \
     QUOTA_STORE_FILE=/app/state/quota-store.json \
+    MEMBER_STORE_FILE=/app/state/member-store.json \
+    INVITE_STORE_FILE=/app/state/invite-store.json \
     LOG_LEVEL=info \
     NODE_ENV=production
 

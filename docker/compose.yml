@@ -32,19 +32,50 @@ services:
     environment:
       # The image already sets these to the paths mounted below, but `.env.example`
       # ships repo-relative defaults, and env_file BEATS the image's own ENV — so a
-      # copied .env silently moves both files inside the container. Pinned here so
-      # the mounts below cannot be defeated by a stray line in .env.
+      # copied .env silently moves the files inside the container. Pinned here so
+      # the volume below cannot be defeated by a stray line in .env.
       MEMBERS_FILE: '/app/config/members.json'
       QUOTA_STORE_FILE: '/app/state/quota-store.json'
+      MEMBER_STORE_FILE: '/app/state/member-store.json'
+      INVITE_STORE_FILE: '/app/state/invite-store.json'
+      # ── Admin API + invite links (optional but recommended) ────────────────
+      # See .env.example for the full explanation. These can also just live in
+      # .env instead of here — either works, this is only for a topology-only
+      # override.
+      # GATEWAY_ADMIN_TOKEN: 'CHANGE_ME'
+      # GATEWAY_PUBLIC_URL: 'http://gateway.lan:3602'
+      # CLIENT_BASE_URL: 'https://app.openplate.example'
+      # ── Organisation mode (OFF by default) ──────────────────────────────────
+      # Turns this into an audited gateway for organisations accountable for
+      # what is submitted through them — read docs/org-mode.md before setting
+      # any of this, including the disclaimer at the top of that document: it
+      # is not a substitute for a DPA or a compliance programme.
+      # ORG_MODE: 'true'
+      # S3_ENDPOINT: 'http://minio:9000'
+      # S3_REGION: 'eu-central-1'
+      # S3_BUCKET: 'plate-audit'
+      # S3_ACCESS_KEY_ID: 'gateway-audit'
+      # S3_SECRET_ACCESS_KEY: 'replace-me'
+      # S3_FORCE_PATH_STYLE: 'true'
+      # AUDIT_RETENTION_DAYS: '30'
+      # AUDIT_MAX_BODY_BYTES: '20971520'
+      # AUDIT_STORE_FILE: '/app/state/audit-log.jsonl'
     ports:
       - '127.0.0.1:3602:3602'
     volumes:
-      # The members registry — token digests only. Read-only on purpose: the
-      # service never writes it, and a read-only mount makes that visible.
-      - ../config/members.json:/app/config/members.json:ro
-      # The daily counters. A named volume so `docker rm` cannot reset every
-      # member's allowance.
+      # ALL runtime state — the daily counters, the member roster and the
+      # outstanding invites. A named volume so `docker rm` cannot reset every
+      # member's allowance or delete the roster.
       - gateway-state:/app/state
+      # ── Upgrading from a hand-edited members.json? Uncomment this. ──────────
+      # It is the LEGACY registry, read once on the first start and folded into
+      # the member store (ADR-0002), after which it is ignored. Read-only
+      # because the service never writes it.
+      #
+      # LEAVE IT COMMENTED ON A FRESH INSTALL. Docker creates a DIRECTORY for a
+      # bind source that does not exist, and a directory where a JSON file is
+      # expected fails the boot — for a file a new installation never had.
+      # - ../config/members.json:/app/config/members.json:ro
 
 volumes:
   gateway-state:

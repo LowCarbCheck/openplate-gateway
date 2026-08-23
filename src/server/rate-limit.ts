@@ -50,6 +50,33 @@ export interface CreateRateLimitOptions {
   perMinute: number;
   /** Injectable clock so tests do not sleep. Defaults to `Date.now`. */
   now?: () => number;
+  /**
+   * What the window is counted against. Defaults to the authenticated member's
+   * id, which is the only correct key for the spend endpoint.
+   *
+   * Two call sites need something else, and both sit in FRONT of their
+   * authentication rather than behind it: the admin API and the public invite
+   * redemption. Both are guessing surfaces — one for the admin token, one for
+   * an invite token — so the thing worth limiting is attempts by an
+   * unauthenticated caller, which only an IP can identify. A member-keyed
+   * limiter mounted after auth would never see the guesses at all.
+   *
+   * Returning `null` fails the request closed with a 401.
+   */
+  keyOf?: (req: Request) => string | null;
+}
+
+/**
+ * Keys on the caller's address.
+ *
+ * `req.ip` honours Express's `trust proxy` setting, which this service leaves
+ * off by default — behind a reverse proxy every caller would otherwise share
+ * the proxy's address and one guessing client would lock out the household. The
+ * fallback string is a single shared bucket, which is the safe direction: it
+ * over-limits rather than under-limits.
+ */
+export function remoteAddressKey(req: Request): string {
+  return req.ip ?? req.socket.remoteAddress ?? 'unknown-remote';
 }
 
 /** Drops timestamps that have fallen out of the trailing window. Mutates in place — this is the hot path. */
@@ -73,7 +100,8 @@ function secondsUntilSlotFrees(oldestMs: number, currentMs: number): number {
 export function createRateLimit(options: CreateRateLimitOptions): RequestHandler {
   const limit = options.perMinute;
   const now = options.now ?? (() => Date.now());
-  /** memberId -> timestamps of its in-window requests, oldest first. */
+  const keyOf = options.keyOf ?? ((req: Request): string | null => getMemberIdentity(req)?.memberId ?? null);
+  /** key -> timestamps of its in-window requests, oldest first. */
   const windows = new Map<string, number[]>();
   let lastSweepMs = now();
 
@@ -88,15 +116,15 @@ export function createRateLimit(options: CreateRateLimitOptions): RequestHandler
     if (currentMs - lastSweepMs < SWEEP_INTERVAL_MS) return;
     lastSweepMs = currentMs;
     const windowStartMs = currentMs - WINDOW_MS;
-    for (const [memberId, timestamps] of windows) {
+    for (const [key, timestamps] of windows) {
       pruneExpired(timestamps, windowStartMs);
-      if (timestamps.length === 0) windows.delete(memberId);
+      if (timestamps.length === 0) windows.delete(key);
     }
   }
 
   return function enforceRateLimit(req: Request, _res: Response, next: NextFunction): void {
-    const identity = getMemberIdentity(req);
-    if (identity === null) {
+    const key = keyOf(req);
+    if (key === null) {
       // FAIL CLOSED. Reaching here means the limiter was mounted before (or
       // without) `createMemberAuth` — a wiring bug, not a client error. Letting
       // the request through "because we cannot key it" would silently disable
@@ -110,16 +138,20 @@ export function createRateLimit(options: CreateRateLimitOptions): RequestHandler
     sweep(currentMs);
 
     const windowStartMs = currentMs - WINDOW_MS;
-    const timestamps = windows.get(identity.memberId) ?? [];
+    const timestamps = windows.get(key) ?? [];
     pruneExpired(timestamps, windowStartMs);
 
     if (timestamps.length >= limit) {
       // Non-null: the branch is only reachable with `limit >= 1` and at least
       // one live timestamp, and a `limit` of 0 is rejected by the config schema.
       const oldestMs = timestamps[0] ?? currentMs;
-      windows.set(identity.memberId, timestamps);
+      windows.set(key, timestamps);
       next(
         tooManyRequests(
+          // Says "for this member" no matter what the key is: an IP-keyed
+          // limiter that named the IP would put a caller-supplied value into a
+          // response, and the wording difference would also tell an admin-token
+          // guesser which limiter they had tripped.
           `Rate limit reached: ${limit} requests per minute for this member.`,
           secondsUntilSlotFrees(oldestMs, currentMs),
         ),
@@ -128,7 +160,7 @@ export function createRateLimit(options: CreateRateLimitOptions): RequestHandler
     }
 
     timestamps.push(currentMs);
-    windows.set(identity.memberId, timestamps);
+    windows.set(key, timestamps);
     next();
   };
 }

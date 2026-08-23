@@ -86,28 +86,34 @@ UPSTREAM_API_KEY=<your real provider key>
 *requests*; only the provider can count *money*. A request's cost depends on the model and
 the image, so the two caps are not substitutes for each other.
 
-### 2. Mint a token for each person
+### 2. Turn on the admin API
+
+This is what lets you add and remove people without editing files or restarting anything.
+Generate a token and put it in `.env`:
 
 ```bash
-pnpm install
-pnpm mint-token alex 50
+openssl rand -base64 32
 ```
 
-The first argument is a short id that will appear in your logs. The second is how many
-requests that person gets per day.
-
-This prints the token **once**. It is not stored and not recoverable — if it is lost, mint a
-new one. It also prints a JSON block. Create the members file from the committed template,
-then paste that block into it:
-
-```bash
-mkdir -p config && cp members.example.json config/members.json
-# edit config/members.json — paste the entry that mint-token printed
+```
+GATEWAY_ADMIN_TOKEN=<paste the generated value>
 ```
 
-The file holds only a digest of the token, so someone who reads it still cannot use it.
+**If you leave this unset, there is no admin API at all** — `/admin` answers "no such
+endpoint" to everybody, exactly as any other unknown address does. That is deliberate: a
+gateway that never wanted an admin API should not advertise that it has one. You can still
+add people with `pnpm mint-token` (step 5).
 
-Repeat for each person.
+Two more values let the gateway build an invite link. Set them if you want to invite people
+by link, which is the easy way:
+
+```
+GATEWAY_PUBLIC_URL=http://gateway.lan:3602
+CLIENT_BASE_URL=https://app.openplate.example
+```
+
+`GATEWAY_PUBLIC_URL` is how *other people on your network* reach the gateway — not
+`localhost`, which only means "this machine" to them.
 
 ### 3. Start it
 
@@ -118,10 +124,79 @@ docker compose -f docker/compose.yml up -d
 **Run it on your home network or your VPN.** The example binds to `127.0.0.1` deliberately.
 A gateway on the open internet is a spend endpoint guarded by one bearer token.
 
-### 4. Point each person at it
+It starts with nobody on it. That is normal — you add people next, while it runs.
 
-Each person opens openplate → **Settings → AI**, chooses the **OpenAI-compatible** provider,
-and enters:
+### 4. Invite each person
+
+**The easiest way is the bundled admin page**, at `http://localhost:3602/admin/ui` (or
+whatever host you bound the gateway to). Sign in with `GATEWAY_ADMIN_TOKEN`, and it lists
+members and invites, and creates an invite — with a **copy link** button — in a couple of
+clicks. Everything below this point is the curl equivalent, for scripting or for when you
+would rather not open a browser.
+
+One request per person. `memberId` is a short id that will appear in your logs; `dailyLimit`
+is how many requests they get per day.
+
+```bash
+curl -s -X POST http://localhost:3602/admin/invites \
+  -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"memberId":"alex","dailyLimit":50}'
+```
+
+You get back a **link**. Send it to that person however you like:
+
+```json
+{
+  "id": "9f2c1b7a4e8d0361",
+  "expiresAt": "2026-08-26T14:00:00.000Z",
+  "link": "https://app.openplate.example/connect-gateway?gateway=...&invite=opgwi_...",
+  "emailed": false
+}
+```
+
+They open it, and openplate connects itself to your gateway. There is nothing for them to
+paste and nothing for you to explain.
+
+**The link works once, and expires in 72 hours.** That is the whole reason invites exist: the
+thing sitting in your chat history afterwards is worthless. Pass `"ttlHours": 168` for up to a
+week if somebody is away.
+
+**To email it instead**, add `"email": "alex@example.com"` and configure SMTP (see
+`.env.example`). The response still contains the link, so you are never stuck if the mail does
+not arrive — `"emailed": false` tells you it did not.
+
+**To see outstanding invites:** open `/admin/ui`, or:
+
+```bash
+curl -s http://localhost:3602/admin/invites -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN"
+```
+
+Each one shows `pending`, `redeemed`, `expired` or `revoked` — this is also where "why
+doesn't my invite work" gets answered fastest: the admin page shows the status of every
+invite you have sent, so you can see at a glance whether it expired, was already redeemed, or
+was revoked, without going near the logs. To withdraw one before it is used,
+`DELETE /admin/invites/<id>` (or the matching button in `/admin/ui`).
+
+**Second device, or a lost phone:** send that member a fresh invite. Invites are per member,
+not per device — redeeming a new one does not touch their existing token or their quota, it
+just gives them another way to connect. Nothing needs to be revoked first.
+
+### 5. Or hand someone a token directly
+
+If you would rather not use invites at all:
+
+```bash
+pnpm install
+pnpm mint-token alex 50
+```
+
+This prints the token **once** and adds the member to the store. It is not saved anywhere and
+cannot be recovered — if it is lost, mint a new one. **A running gateway picks the new member
+up on the next request; no restart.**
+
+That person then opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
+provider, and enters:
 
 - **Base URL** — the gateway, e.g. `http://gateway.lan:3602/v1`
 - **API key** — their own token
@@ -130,34 +205,77 @@ Take one photo to confirm it works.
 
 ### Running it
 
+**To see who is on the gateway:**
+
+```bash
+curl -s http://localhost:3602/admin/members -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN"
+```
+
+Tokens and their digests are never returned by this — or by anything except the one response
+that created them.
+
 **To see who is spending what**, read `quota-store.json`, or watch the log — every request
 logs the member id and the day's running count. No request or response body is ever logged,
 by design.
 
-**To revoke one person**, delete their entry from `members.json` and restart. Revocation is
-per member: everyone else keeps working untouched, and the revoked token stops matching
-immediately — it cannot be reused anywhere, because the gateway is the only thing that ever
-accepted it.
+**To revoke one person:**
 
-**To change someone's allowance**, edit their `dailyLimit` and restart.
+```bash
+curl -s -X DELETE http://localhost:3602/admin/members/alex \
+  -H "Authorization: Bearer $GATEWAY_ADMIN_TOKEN"
+```
+
+**This takes effect on their very next request. No restart.** Revocation is per member:
+everyone else keeps working untouched, and the revoked token cannot be reused anywhere,
+because the gateway is the only thing that ever accepted it.
+
+The member is kept as a revoked record rather than deleted. That is on purpose — it is what
+stops the token being quietly reinstated by an old `members.json` or a restored backup.
+
+**To change someone's allowance**, revoke them and invite them again with the new limit. The
+gateway does not edit a live member's limit in place, so there is never a moment where it is
+unclear which cap applied to which request.
 
 **Allowances reset at UTC midnight**, not at your local midnight. A household can span time
 zones, and a local reset would quietly give someone in another zone a second allowance.
 
-**A member with no `dailyLimit` gets nothing.** That is deliberate: the failure mode of
+**A member with no daily limit gets nothing.** That is deliberate: the failure mode of
 "unlimited by default" is one you find out about on a bill.
+
+### Upgrading from a hand-edited `members.json`
+
+Nothing to do. On the first start after the upgrade, the gateway reads your `members.json`,
+copies it to `members.json.bak` beside the state files, and folds every entry into the new
+store. Everyone's existing token keeps working.
+
+It happens **once**. After that the store is the authority and `members.json` is ignored — so
+somebody you revoke through the admin API stays revoked, even though the old file still names
+them. You can delete the old file whenever you like.
 
 ### If something breaks
 
-**Everything returns 401.** The token does not match any digest in `members.json`. Mint a
-fresh one — a token cannot be recovered from the file.
+**Everything returns 401.** The token does not match any active member. Either it was
+revoked, or it was never right — mint or invite a fresh one. A token cannot be recovered.
+
+**Everything returns 403 with `reconsent_required`.** The gateway's privacy mode changed since
+that person joined. Their token is real but stale: send them a new invite, which records that
+they accepted the current terms.
 
 **Everything returns 429.** Either the day's quota is used up, or the per-minute burst limit
 is tripping. The response says which, and carries `Retry-After`.
 
+**`/admin` returns 404.** `GATEWAY_ADMIN_TOKEN` is not set, or the container did not pick it
+up. There is no admin API without it, by design.
+
+**An invite link does not work.** The person gets one message for every cause, on purpose — it
+would otherwise tell anybody guessing at links which guesses were close. **Check `/admin/ui`
+first** — it shows that invite's status (`expired`, `redeemed`, `revoked`) without you needing
+to touch the log. If you need the raw event, it is also in your log: search for `Invite
+redemption rejected` and read the `reason` field.
+
 **Everyone's allowance reset unexpectedly.** The quota file was lost. It must be on durable
 storage — the compose example puts it on a named volume for exactly this reason.
 
-**Nothing loads at all after a restart.** The members file is missing or malformed. That is
-fatal on purpose: a gateway that authenticates nobody is a bug, not a safe default. The
-startup error names the problem.
+**Nobody can log in after a restart, and the log says there are no members.** The member store
+was lost. It must be on the same durable volume as the quota file. Losing it is worse than
+losing the counters: it revokes everybody.

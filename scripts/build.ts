@@ -13,7 +13,7 @@
  * needs no shim — which is the whole reason this file exists instead of a
  * one-line script entry.
  *
- * WHY THESE TWO ARE EXTERNAL (there is no `sharp` here — this service decodes
+ * WHY THESE FOUR ARE EXTERNAL (there is no `sharp` here — this service decodes
  * nothing, it relays bytes):
  *  - `express` relies on `instanceof` in a few internals, so a second bundled
  *    copy misbehaves in ways that are extremely unfun to debug.
@@ -21,6 +21,15 @@
  *    into an ESM bundle it produces exactly the dynamic-require shim asserted
  *    against below — the bundled copy throws `Dynamic require of "node:assert"
  *    is not supported` on its first line.
+ *  - `nodemailer` is CommonJS for the same reason and fails the same way. It
+ *    also resolves transports and encodings by dynamic `require`, so the shim
+ *    would not even fire until an operator with SMTP configured tried to send
+ *    an invite — i.e. in production, on somebody else's box.
+ *  - `@aws-sdk/client-s3` (org mode only) resolves credential providers, region
+ *    loaders and checksum implementations dynamically, and inlining it into an
+ *    ESM bundle produces the same shim. It is also large, and a family gateway —
+ *    the majority deployment — never loads it: leaving it external keeps it out
+ *    of the hot path of the bundle a Raspberry Pi parses at boot.
  *
  * `zod` is pure ESM and is bundled.
  */
@@ -65,7 +74,7 @@ async function main(): Promise<void> {
     platform: 'node',
     format: 'esm',
     target: 'node22',
-    external: ['express', 'undici'],
+    external: ['express', 'undici', 'nodemailer', '@aws-sdk/client-s3'],
     sourcemap: true,
     logLevel: 'info',
   });

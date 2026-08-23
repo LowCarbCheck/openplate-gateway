@@ -92,22 +92,41 @@ services:
       UPSTREAM_API_KEY: 'opk_CHANGE_ME'
       # The image already sets these to the paths mounted below, but
       # `.env.example` ships repo-relative defaults, and an env_file BEATS the
-      # image's own ENV — so a copied .env silently moves both files inside the
-      # container. Pinned here so the mounts below cannot be defeated.
+      # image's own ENV — so a copied .env silently moves the files inside the
+      # container. Pinned here so the volume below cannot be defeated.
       MEMBERS_FILE: '/app/config/members.json'
       QUOTA_STORE_FILE: '/app/state/quota-store.json'
+      MEMBER_STORE_FILE: '/app/state/member-store.json'
+      INVITE_STORE_FILE: '/app/state/invite-store.json'
       # A local model costs electricity, not credits, so the burst guard can be
-      # looser than it would be in front of a metered provider. The daily quota
-      # in members.json is still the real limit.
+      # looser than it would be in front of a metered provider. Each member's
+      # daily quota is still the real limit.
       RATE_LIMIT_PER_MINUTE: '30'
       LOG_LEVEL: info
+      # ── Admin API + invite links (optional but recommended) ────────────────
+      # Uncomment to add and remove members without editing files or restarting.
+      # Generate with: openssl rand -base64 32 — minimum 24 characters. Leaving
+      # this unset disables the admin API entirely; `/admin` and `/admin/ui`
+      # then answer "no such endpoint", exactly like any other unknown path.
+      # GATEWAY_ADMIN_TOKEN: 'CHANGE_ME'
+      # How this household reaches the gateway from a phone or laptop — the
+      # same host used in DEFAULT_INFERENCE_BASE_URL below, with the gateway's
+      # own port. Needed to build a clickable invite link.
+      # GATEWAY_PUBLIC_URL: 'http://openplate.example.lan:3602'
+      # Where openplate itself is served, so an invite link can send a member
+      # straight to /connect-gateway. Same host as APP_URL below, browser-reachable.
+      # CLIENT_BASE_URL: 'http://openplate.example.lan:3000'
     volumes:
-      # The members registry — token digests only. Read-only on purpose: the
-      # service never writes it, and a read-only mount makes that visible.
-      - ../../config/members.json:/app/config/members.json:ro
-      # The daily counters. A named volume so `docker rm` cannot reset every
-      # member's allowance.
+      # ALL runtime state — counters, roster and outstanding invites. A named
+      # volume so `docker rm` cannot reset every member's allowance or delete
+      # the roster.
       - gateway-state:/app/state
+      # ── Upgrading from a hand-edited members.json? Uncomment this. ──────────
+      # Read once on the first start and folded into the member store
+      # (ADR-0002), then ignored. LEAVE IT COMMENTED ON A FRESH INSTALL: Docker
+      # creates a DIRECTORY for a bind source that does not exist, and a
+      # directory where a JSON file is expected fails the boot.
+      # - ../../config/members.json:/app/config/members.json:ro
 
   openplate:
     image: ghcr.io/lowcarbcheck/openplate:latest
@@ -134,15 +153,28 @@ services:
       # HTML it sends to every browser, so baking one in would hand every
       # visitor the same token — and one shared token has one shared quota,
       # which is exactly the per-member accounting the gateway exists to
-      # provide. Members must be told apart, so each member pastes their OWN
-      # token instead.
+      # provide. Members must be told apart, so each member gets their OWN
+      # token instead — via an invite link, not a shared default.
       #
       # What that means in the app: the "This openplate provides its own AI"
       # card still renders (the base URL alone is the gate), and one tap saves
-      # the gateway's base URL with an EMPTY key. Each member then opens
-      # Settings → AI and types their own token into the API key field. Until
-      # they do, the gateway answers 401 — which is the correct answer to an
+      # the gateway's base URL with an EMPTY key. From there the admin opens
+      # the gateway's /admin/ui, creates an invite for that person, and sends
+      # them the link (copy it, or let the gateway email it — see
+      # docs/family-setup.md). The member clicks it, lands on openplate's
+      # /connect-gateway, and confirms — openplate fills in their token for
+      # them, nothing to type or paste. Until a member has done that, the
+      # gateway answers 401 to them, which is the correct answer to an
       # unidentified caller.
+      #
+      # In THIS topology GATEWAY_PUBLIC_URL and DEFAULT_INFERENCE_BASE_URL are
+      # the same origin, so the CSP note above already covers the invite flow
+      # too — nothing further to set. That stops being true the moment
+      # GATEWAY_PUBLIC_URL points somewhere else (a different host, a tailnet
+      # name instead of the LAN address, etc.): then add that origin to
+      # CSP_CONNECT_EXTRA on the openplate service (see openplate's own
+      # .env.example) or the browser's CSP will block the connection, e.g.:
+      # CSP_CONNECT_EXTRA: 'http://openplate.example.lan:3602'
 
 volumes:
   inference-models:

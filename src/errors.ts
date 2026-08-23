@@ -53,6 +53,25 @@ export function unauthorized(message: string): HttpError {
   return new HttpError(message, 401);
 }
 
+/**
+ * The named thing does not exist — an admin asking to revoke a member id that
+ * was never there.
+ *
+ * NOT used to hide an endpoint. `/admin` answers 404 when no admin token is
+ * configured, and that 404 is produced by the router never being mounted, not
+ * by this factory: the two must not be confusable, because one means "you asked
+ * for something that is not here" and the other means "there is nothing here to
+ * ask about".
+ */
+export function notFound(message: string): HttpError {
+  return new HttpError(message, 404);
+}
+
+/** The request is well-formed but conflicts with what already exists — a duplicate member id. */
+export function conflict(message: string): HttpError {
+  return new HttpError(message, 409);
+}
+
 /** The body is larger than `MAX_REQUEST_BYTES` — refused before it is forwarded. */
 export function payloadTooLarge(message: string): HttpError {
   return new HttpError(message, 413);

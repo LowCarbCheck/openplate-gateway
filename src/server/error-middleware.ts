@@ -82,6 +82,10 @@ function describeStatus(status: number): { type: string; code: string } {
       return { type: 'invalid_request_error', code: 'invalid_request' };
     case 401:
       return { type: 'invalid_request_error', code: 'invalid_api_key' };
+    case 404:
+      return { type: 'invalid_request_error', code: 'not_found' };
+    case 409:
+      return { type: 'invalid_request_error', code: 'conflict' };
     case 413:
       return { type: 'invalid_request_error', code: 'payload_too_large' };
     case 429:

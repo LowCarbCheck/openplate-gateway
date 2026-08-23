@@ -1,50 +1,38 @@
 /**
- * `pnpm mint-token <member-id> <daily-limit>` — mint one member token.
+ * `pnpm mint-token <member-id> <daily-limit>` — mint one member token and add
+ * the member to the store.
  *
- * It prints two things: the TOKEN, once, and the registry ENTRY containing only
- * the token's SHA-256 digest. The token is not stored anywhere and cannot be
- * recovered; a member who loses theirs gets a new one minted, which is the
- * correct trade for a `members.json` that gets copied into deployments,
- * committed by mistake, pasted into issues and read by every backup.
+ * IT NOW WRITES, AND THAT IS THE CHANGE ADR-0002 MADE. It used to print a JSON
+ * block for the operator to paste into `members.json` by hand, and refuse to
+ * touch a file. The reasoning was sound for the file it was protecting: a
+ * hand-edited registry that a bad write could truncate, reorder or empty, whose
+ * failure mode was a gateway that authenticates nobody.
  *
- * IT WRITES NOTHING TO DISK. Not the members file, not a temp file, not a
- * dotfile. That is the whole design:
+ * The member store removed that hazard rather than working around it. Writes go
+ * through `store/atomic-json-file.ts`: read-modify-write under an in-process
+ * lock, then a write to a temp file and an atomic `rename` over the target. A
+ * process killed mid-write leaves the old file completely intact, and a file
+ * that exists but does not parse stops the operation instead of being replaced
+ * with an empty one. So the paste step bought nothing that the store does not
+ * now guarantee, and cost every operator a manual JSON edit at the exact moment
+ * they were in a hurry.
  *
- *  - The operator runs this against a LIVE production members file, often on
- *    the box, often at 23:00 because a family member cannot log in. A script
- *    that edited that file could truncate it, reorder it, drop a comment, or
- *    lose the other members if the JSON write raced a container restart — and
- *    the failure mode of a corrupted registry is a gateway that authenticates
- *    NOBODY. This script cannot cause that, no matter how it is invoked.
- *  - Pasting is also the review step. The operator sees the entry before it
- *    lands, which is when a typo'd member id or a limit of 5000 gets caught.
- *  - And it makes the script safe to run anywhere: a laptop with no access to
- *    the deployment produces exactly the same output.
+ * IT DOES NOT LOAD THE SERVICE CONFIG. `loadConfig` demands `UPSTREAM_BASE_URL`
+ * and `UPSTREAM_API_KEY`, which this command has no use for — requiring them
+ * would mean a laptop without the provider key could not mint a token. It reads
+ * `MEMBER_STORE_FILE` from the environment directly, with the same default, and
+ * prints the path it wrote to so the operator can see whether it was the one
+ * they meant.
  *
- * THE TOKEN IS 32 RANDOM BYTES from `crypto.randomBytes` — a CSPRNG, not
- * `Math.random`. This value is the only thing standing between the internet and
- * the payer's provider key, so 256 bits of entropy is not excess; it removes
- * guessing from the threat model entirely and lets the gateway spend its
- * defences on quotas instead.
+ * THE TOKEN IS 32 RANDOM BYTES from a CSPRNG, and is printed ONCE. It is not
+ * stored — only its SHA-256 digest is — and cannot be recovered. A member who
+ * loses theirs gets a new one minted, which is the correct trade for a file that
+ * ends up in backups and volume snapshots.
  */
-import { createHash, randomBytes } from 'node:crypto';
-
-/**
- * The member id rule, kept in step with `MEMBER_ID_PATTERN` in `src/members.ts`.
- *
- * Duplicated deliberately rather than exported from there: this script must not
- * import the service (it would drag in config, zod schemas and a filesystem
- * dependency for a job that is two `crypto` calls), and the duplication is
- * fail-safe — if the two ever drift, the gateway REFUSES the entry at boot with
- * a message naming the field. The failure is loud and at the right time.
- *
- * The constraint exists because the id is written into log lines: an
- * unconstrained id could carry a newline and forge a second JSON log record.
- */
-const MEMBER_ID_PATTERN = /^[a-z0-9_-]{1,32}$/;
-
-/** 32 bytes = 256 bits. base64url so it survives a URL, a header and a copy-paste. */
-const TOKEN_BYTES = 32;
+import { DEFAULT_MEMBER_STORE_FILE } from '../src/config.js';
+import { createFileMemberStore } from '../src/member-store.js';
+import { MEMBER_ID_PATTERN } from '../src/members.js';
+import { memberTokenDigest, mintMemberToken } from '../src/tokens.js';
 
 const USAGE = 'Usage: pnpm mint-token <member-id> <daily-limit>\n  e.g. pnpm mint-token alex 50';
 
@@ -66,7 +54,7 @@ function parseDailyLimit(raw: string): number {
   return value;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const [memberId, dailyLimitRaw] = process.argv.slice(2);
 
   if (!memberId || !dailyLimitRaw) fail('Both a member id and a daily limit are required.');
@@ -77,15 +65,28 @@ function main(): void {
   }
   const dailyLimit = parseDailyLimit(dailyLimitRaw);
 
-  const token = randomBytes(TOKEN_BYTES).toString('base64url');
-  const tokenSha256 = createHash('sha256').update(token).digest('hex');
+  const storePath = process.env.MEMBER_STORE_FILE?.trim() || DEFAULT_MEMBER_STORE_FILE;
+  const store = createFileMemberStore(storePath);
 
-  const entry = JSON.stringify({ id: memberId, tokenSha256, dailyLimit }, null, 2);
+  const token = mintMemberToken();
+  try {
+    await store.create({
+      id: memberId,
+      tokenSha256: memberTokenDigest(token),
+      dailyLimit,
+      // Everything this script mints is a family member. Org mode issues
+      // members through invites, where consent is recorded; there is no
+      // equivalent for a token an operator hands over directly.
+      mode: 'family',
+    });
+  } catch (error) {
+    // `message` only — no stack, no cause chain. Same discipline as `main.ts`.
+    fail(error instanceof Error ? error.message : 'Could not add the member.');
+  }
 
   // Written straight to stdout rather than through the logger: this is a
   // one-time operator handover meant to be read in a terminal, not a log event.
-  // It is also the ONLY time the token is ever printed — the logger would be the
-  // wrong place for it twice over.
+  // It is also the ONLY time the token is ever printed.
   process.stdout.write(
     [
       '',
@@ -97,18 +98,18 @@ function main(): void {
       '',
       '='.repeat(72),
       '',
-      '  Paste this into the "members" array of your members.json:',
+      `  Added to the member store at ${storePath}`,
+      `  Daily limit: ${dailyLimit} requests per UTC day.`,
       '',
-      entry
-        .split('\n')
-        .map((line) => `    ${line}`)
-        .join('\n'),
-      '',
-      '  This file holds the DIGEST, never the token. Nothing was written to',
-      '  disk by this command.',
+      '  The store holds the DIGEST, never the token. A running gateway picks',
+      '  this member up on the next request — no restart is needed.',
       '',
     ].join('\n'),
   );
 }
 
-main();
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : 'unknown error';
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+});

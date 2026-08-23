@@ -2,7 +2,7 @@
   "name": "openplate-gateway",
   "version": "0.1.0",
   "private": true,
-  "description": "Share one AI provider key across a household or a hosted tier \u2014 an OpenAI-compatible proxy with per-member tokens, hard daily quotas, and no request-body logging.",
+  "description": "Share one AI provider key across a household or a hosted tier — an OpenAI-compatible proxy with per-member tokens, hard daily quotas, and no request-body logging.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -20,13 +20,16 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1111.0",
     "express": "^4.21.2",
+    "nodemailer": "^9.0.5",
     "undici": "8.10.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.1",
     "esbuild": "^0.24.2",
     "oxlint": "1.78.0",
     "tsx": "^4.19.2",

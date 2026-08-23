@@ -1,5 +1,12 @@
 /**
- * The member registry: who may spend the shared provider key, and how much.
+ * The LEGACY member registry: a hand-edited `members.json`, read once at boot
+ * and merged into the writable member store (`member-store.ts`), which is the
+ * authority from ADR-0002 onward.
+ *
+ * This module survives because that file still exists in every deployment that
+ * predates the store, and because its schema — the id rule and the digest rule —
+ * is the same schema the store enforces. Those two patterns are exported from
+ * here so there is one definition of "a member id" in the service.
  *
  * THE FILE HOLDS A SHA-256 DIGEST, NEVER A TOKEN. A member's token is shown
  * once, at minting time, and is not recoverable from here. That is the whole
@@ -14,12 +21,11 @@
  * exactly like "working" until the money is gone. Deny-by-default puts the
  * failure where a human is watching.
  *
- * AN UNREADABLE REGISTRY IS FATAL — the opposite of the quota file's policy,
- * on purpose. Starting with an empty quota file grants at most one day of extra
- * allowance. Starting with an empty registry produces a gateway that
- * authenticates nobody: every member is rejected, which reads as a broken
- * deployment rather than as a safety default, and someone will "fix" it by
- * disabling auth. Refusing to start says what actually happened.
+ * A LEGACY FILE THAT EXISTS AND DOES NOT PARSE IS STILL FATAL. An ABSENT one is
+ * now normal — a gateway installed after ADR-0002 never had one, and its members
+ * live in the store. The distinction is the point: silently ignoring a
+ * `members.json` an operator DID write would drop every member they thought they
+ * had configured.
  */
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
@@ -40,21 +46,21 @@ export interface MemberRegistry {
  * could carry a newline and forge a second JSON log record, or carry the
  * member's own email into logs that were meant to hold no personal data.
  */
-const MEMBER_ID_PATTERN = /^[a-z0-9_-]{1,32}$/;
+export const MEMBER_ID_PATTERN = /^[a-z0-9_-]{1,32}$/;
 
 /** Lowercase hex only. Uppercase would compare unequal against `createHash(...).digest('hex')`. */
-const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+export const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
+/** The one wording for a bad member id, shared by the legacy file and the store. */
+export const MEMBER_ID_MESSAGE = 'must be 1–32 chars of lowercase letters, digits, "-" or "_"';
+
+/** The one wording for a value that is a token where a digest belongs. */
+export const SHA256_HEX_MESSAGE =
+  'must be a 64-character lowercase hex SHA-256 digest of the token, not the token itself';
 
 const MemberSchema = z.object({
-  id: z
-    .string()
-    .regex(MEMBER_ID_PATTERN, 'must be 1–32 chars of lowercase letters, digits, "-" or "_"'),
-  tokenSha256: z
-    .string()
-    .regex(
-      SHA256_HEX_PATTERN,
-      'must be a 64-character lowercase hex SHA-256 digest of the token, not the token itself',
-    ),
+  id: z.string().regex(MEMBER_ID_PATTERN, MEMBER_ID_MESSAGE),
+  tokenSha256: z.string().regex(SHA256_HEX_PATTERN, SHA256_HEX_MESSAGE),
   // Deny-by-default. See the module header for why this is not `.default(Infinity)`.
   dailyLimit: z.number().int().nonnegative().default(0),
 });
@@ -117,6 +123,41 @@ export function parseMembers(raw: unknown): MemberRegistry {
   }
   assertNoDuplicates(parsed.data.members);
   return { members: parsed.data.members };
+}
+
+/**
+ * Reads and validates the legacy registry, returning `null` when the file does
+ * not exist.
+ *
+ * ABSENT AND MALFORMED ARE NOT THE SAME ANSWER. A gateway installed after
+ * ADR-0002 has no `members.json` at all and must boot; a gateway whose
+ * `members.json` is unparseable has members its operator believes in, and
+ * booting without them would silently revoke the household. `null` means "there
+ * was nothing to merge"; a throw means "there was something and I could not
+ * read it".
+ */
+export async function loadLegacyMembersFileIfPresent(
+  filePath: string,
+): Promise<MemberRegistry | null> {
+  try {
+    return await loadMembersFile(filePath);
+  } catch (error) {
+    // Only a genuinely absent file is forgiven. `loadMembersFile` wraps the
+    // original in `cause`, so that is where the errno lives — a message match
+    // would be a different function's wording to keep in step.
+    if (error instanceof Error && isFileNotFound(error.cause)) return null;
+    throw error;
+  }
+}
+
+/** `ENOENT` and nothing else. Narrowed from `unknown` because `catch` gives no guarantees. */
+function isFileNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ENOENT'
+  );
 }
 
 /**
