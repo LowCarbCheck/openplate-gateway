@@ -9,11 +9,11 @@
 #
 #   1. cp ../../.env.example ../../.env    and set UPSTREAM_BASE_URL +
 #                                          UPSTREAM_API_KEY to the two values
-#                                          marked EDIT ME (1/3) and (2/3) below
-#   2. pnpm mint-token alex 50             for each member; paste the printed
-#                                          entry into config/members.json and
-#                                          give that member the token
-#   3. docker compose -f docker/topologies/compose.household.yml up -d
+#                                          marked EDIT ME (1/3) and (2/3) below,
+#                                          plus GATEWAY_ADMIN_TOKEN
+#   2. docker compose -f docker/topologies/compose.household.yml up -d
+#   3. open /admin/ui (or POST /admin/invites) to invite each member — no
+#                                          file to edit, no restart
 #
 # Paths are relative to THIS file, so `../../` is the repository root.
 #

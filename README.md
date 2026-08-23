@@ -58,24 +58,25 @@ UPSTREAM_BASE_URL=https://api.mistral.ai/v1
 UPSTREAM_API_KEY=<the payer's real provider key>
 ```
 
-Mint a token for each member. This prints the token **once** — it is not recoverable
-afterwards, and the file stores only its digest.
+Set `GATEWAY_ADMIN_TOKEN` in `.env` (`openssl rand -base64 32` makes one), then start the
+gateway:
+
+```bash
+docker compose -f docker/compose.yml up -d
+```
+
+Open `http://localhost:3602/admin/ui`, sign in with `GATEWAY_ADMIN_TOKEN`, and create an
+invite. Send the link it gives you to the member — they open it and openplate connects
+itself, with nothing to paste.
+
+**No admin API?** Mint a token directly instead — no restart needed, either way:
 
 ```bash
 pnpm install
 pnpm mint-token alex 50     # member id, requests per day
 ```
 
-Create the members file from the committed template, paste the printed entry into it,
-then start the gateway:
-
-```bash
-mkdir -p config && cp members.example.json config/members.json
-# edit config/members.json — paste the entry that mint-token printed
-docker compose -f docker/compose.yml up -d
-```
-
-Each member opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
+That person then opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
 provider, and enters:
 
 - **Base URL** — your gateway's address, e.g. `http://gateway.lan:3602/v1`
@@ -149,8 +150,11 @@ known limitations.
 |---|---|---|---|
 | `POST` | `/v1/chat/completions` | member token | The proxy. Streaming is passed through. |
 | `GET` | `/healthcheck` | none | Liveness. |
+| `GET` | `/v1/gateway/info` | none | Gateway identity (name, model, version) and `auditEnabled` — read by a client before it has a token to authenticate with. |
+| `POST` | `/v1/invites/redeem` | none | Turns a one-shot invite token into a member token. What an invite link's `/connect-gateway` step calls. |
 | `GET` | `/admin/ui` | admin token | The bundled admin page — members, invites, links. |
-| `*` | `/admin/*` | admin token | The admin API `/admin/ui` is built on. 404 if `GATEWAY_ADMIN_TOKEN` is unset. See docs/family-setup.md and docs/org-mode.md. |
+| `*` | `/admin/*` | admin token | The admin API `/admin/ui` is built on. 404 if `GATEWAY_ADMIN_TOKEN` is unset. See docs/family-setup.md. |
+| `*` | `/admin/audit*` | admin token, org mode | The audit trail. Gated on top of the admin token by `ORG_MODE=true` — 404 on a family gateway even with a valid admin token, same as any unknown path. See docs/org-mode.md. |
 
 ## Development
 

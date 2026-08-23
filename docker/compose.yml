@@ -1,9 +1,10 @@
 # A household gateway, in one file.
 #
-#   1. cp .env.example .env      and fill in UPSTREAM_BASE_URL + UPSTREAM_API_KEY
-#   2. pnpm mint-token alex 50   for each member; paste the printed entry into
-#                                config/members.json and give the member the token
-#   3. docker compose -f docker/compose.yml up -d
+#   1. cp .env.example .env       and fill in UPSTREAM_BASE_URL + UPSTREAM_API_KEY,
+#                                 plus GATEWAY_ADMIN_TOKEN (openssl rand -base64 32)
+#   2. docker compose -f docker/compose.yml up -d
+#   3. open /admin/ui (or POST /admin/invites) to invite each member — no file
+#                                 to edit, no restart
 #
 # Paths below are relative to THIS file, so `../` is the repository root — that
 # is where `.env` and `config/members.json` live.
