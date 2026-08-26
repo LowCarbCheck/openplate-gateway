@@ -2,13 +2,21 @@ node_modules/
 dist/
 coverage/
 
-# Secrets and runtime state. `members.json` holds token digests and
-# `quota-store.json` holds who spent what — neither belongs in git, and the
-# `.example` files are the committed templates.
+# Secrets and runtime state. None of these belongs in git, and the `.example`
+# files are the committed templates.
+#
+# `members.json` (legacy) and `member-store.json` hold member token digests;
+# `invite-store.json` holds the digests of invites that have not been redeemed
+# yet, which are live credentials until they are; `quota-store.json` holds who
+# spent what. This repository is public and a self-hoster runs from a clone of
+# it, so an un-ignored state file is a credential in somebody's fork.
 .env*
 !.env.example
 members.json
+member-store.json
+invite-store.json
 quota-store.json
+audit-log.jsonl
 *.log
 
 # Agent scratch. Internal working notes and transient worktrees, not project
