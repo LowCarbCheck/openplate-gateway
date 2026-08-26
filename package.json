@@ -13,6 +13,7 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "mint-token": "tsx scripts/mint-token.ts",
+    "gw-api": "tsx scripts/gw-api/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

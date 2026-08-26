@@ -2,6 +2,30 @@
  * `pnpm mint-token <member-id> <daily-limit>` — mint one member token and add
  * the member to the store.
  *
+ * ── THIS IS THE OFFLINE BOOTSTRAP PATH, AND IT IS FROZEN ────────────────────
+ * `pnpm gw-api` is the primary operator interface (`scripts/gw-api/cli.ts`): a
+ * thin HTTP client over the admin API, where every rule — the id pattern, the
+ * quota ceiling, the member-exists check — is enforced once, by the server, for
+ * every caller. This command bypasses all of that and writes the member store
+ * directly, so it exists for exactly one situation and gains no features, ever.
+ *
+ * THAT SITUATION IS REAL: an installation that deliberately left
+ * `GATEWAY_ADMIN_TOKEN` unset has no admin API at all — the whole `/admin` tree
+ * answers 404 to everybody, by design (ADR-0002), and no HTTP client can reach
+ * it. Those operators still need a way to add the first person. This is it. If
+ * you have an admin token, use `gw-api`.
+ *
+ * NO RESTART IS NEEDED, and that is a property of the store rather than a
+ * promise made here: `atomic-json-file.ts#readUnlocked` calls `readFile` on
+ * every read and caches nothing, and `member-auth.ts` asks the directory for
+ * `all()` on every request. A member minted against a running gateway
+ * authenticates on the next request.
+ *
+ * The one cross-process caveat: this command and the running gateway hold
+ * independent in-process locks, so a mint that overlaps an admin-API write can
+ * lose one of the two records — never a corrupt file, because the write lands
+ * through a temp file and an atomic `rename`.
+ *
  * IT NOW WRITES, AND THAT IS THE CHANGE ADR-0002 MADE. It used to print a JSON
  * block for the operator to paste into `members.json` by hand, and refuse to
  * touch a file. The reasoning was sound for the file it was protecting: a
@@ -103,6 +127,9 @@ async function main(): Promise<void> {
       '',
       '  The store holds the DIGEST, never the token. A running gateway picks',
       '  this member up on the next request — no restart is needed.',
+      '',
+      '  With an admin token configured, `pnpm gw-api members add` does this',
+      '  through the API instead, with the same rules the server enforces.',
       '',
     ].join('\n'),
   );

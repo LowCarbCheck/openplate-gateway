@@ -65,11 +65,29 @@ gateway:
 docker compose -f docker/compose.yml up -d
 ```
 
+`.env` is read by **docker compose only** — the gateway has no dotenv dependency and is not
+getting one. `pnpm dev` and `pnpm start` read your shell environment instead, so export the
+file first if you run them:
+
+```bash
+set -a && . ./.env && set +a && pnpm dev
+```
+
 Open `http://localhost:3602/admin/ui`, sign in with `GATEWAY_ADMIN_TOKEN`, and create an
 invite. Send the link it gives you to the member — they open it and openplate connects
 itself, with nothing to paste.
 
-**No admin API?** Mint a token directly instead — no restart needed, either way:
+Prefer a terminal? `pnpm gw-api` does the same things over the same API:
+
+```bash
+pnpm install
+export GATEWAY_ADMIN_TOKEN='...'          # the value you put in .env
+pnpm gw-api invites create alex 50        # prints the invite link, once
+```
+
+**No admin API at all?** If you deliberately left `GATEWAY_ADMIN_TOKEN` unset, `/admin`
+answers 404 to everybody and no HTTP client can help. Mint a token offline instead — no
+restart needed, either way:
 
 ```bash
 pnpm install
@@ -134,6 +152,39 @@ call, for scripting. See [docs/family-setup.md](docs/family-setup.md) for the fu
 including the openplate side: an invite link opens `/connect-gateway` in the client and the
 member is connected with nothing to paste.
 
+### `gw-api` — the admin API from a terminal
+
+`pnpm gw-api` is a thin HTTP client over the same `/admin` endpoints the admin page uses. It
+is the primary command-line interface and the one that grows; it reads no files and needs no
+access to the gateway's state, so it runs from any machine that can reach the address.
+
+```bash
+export GATEWAY_ADMIN_TOKEN='...'      # the same value the gateway was started with
+
+pnpm gw-api status                    # reachable? healthy?
+pnpm gw-api info                      # name, model, mode, version
+pnpm gw-api members list              # the roster — never shows tokens
+pnpm gw-api members add alex 50       # PRINTS THE MEMBER TOKEN, once
+pnpm gw-api members revoke alex
+pnpm gw-api invites list
+pnpm gw-api invites create robin 25 --email robin@example.com
+pnpm gw-api invites revoke inv_...
+```
+
+| Option | Meaning |
+|---|---|
+| `--url <url>` | Which gateway. Beats `GATEWAY_URL`; defaults to `http://localhost:3602`. |
+| `--json` | The raw response, for scripts. |
+| `--email <addr>` | `invites create` only — also email the invite, if this gateway has a mailer. |
+
+Auth is `GATEWAY_ADMIN_TOKEN` and nothing else. There is **no `--token` flag**: an argument
+is visible in shell history and in `ps` to every other user on the host. There is no
+`--production` flag either — openplate-gateway has no canonical instance, so use `--url`.
+
+`members add` and `invites create` print a credential that the gateway shows **once** and
+cannot recover. That is the point of them. Never paste that output into a commit, an issue,
+a chat or a bug report.
+
 ## Organisation mode
 
 Off by default, and it is meant to stay off for a household. `ORG_MODE=true` turns this into
@@ -152,7 +203,7 @@ known limitations.
 | `GET` | `/healthcheck` | none | Liveness. |
 | `GET` | `/v1/gateway/info` | none | Gateway identity (name, model, version) and `auditEnabled` — read by a client before it has a token to authenticate with. |
 | `POST` | `/v1/invites/redeem` | none | Turns a one-shot invite token into a member token. What an invite link's `/connect-gateway` step calls. |
-| `GET` | `/admin/ui` | admin token | The bundled admin page — members, invites, links. |
+| `GET` | `/admin/ui` | admin token | The bundled admin page — members, invites, links. `pnpm gw-api` is the terminal equivalent. |
 | `*` | `/admin/*` | admin token | The admin API `/admin/ui` is built on. 404 if `GATEWAY_ADMIN_TOKEN` is unset. See docs/family-setup.md. |
 | `*` | `/admin/audit*` | admin token, org mode | The audit trail. Gated on top of the admin token by `ORG_MODE=true` — 404 on a family gateway even with a valid admin token, same as any unknown path. See docs/org-mode.md. |
 
@@ -161,7 +212,7 @@ known limitations.
 ```bash
 nix develop       # optional — node 22 + pnpm, no global install
 pnpm install
-pnpm dev          # tsx watch
+pnpm dev          # tsx watch — reads your SHELL environment, not .env
 pnpm typecheck
 pnpm test
 pnpm build        # esbuild → dist/main.js
