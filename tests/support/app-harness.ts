@@ -92,7 +92,16 @@ export async function seedMembers(
   }
 }
 
-/** A mailer that records instead of sending. No SMTP anywhere in the unit suite. */
+/**
+ * A mailer that records instead of sending. No SMTP server anywhere in the unit
+ * suite.
+ *
+ * IT CANNOT LEAK, which is exactly why it is the wrong fixture for a leak test:
+ * a `not.toContain` assertion against a harness that never had the recipient in
+ * an error message passes for free. A test about what a transport does with a
+ * failure response has to drive a real one — see
+ * `invite-http-mail-leak.test.ts`.
+ */
 export interface RecordingMailer extends Mailer {
   readonly sent: OutgoingMail[];
 }
@@ -167,7 +176,12 @@ export interface TestApp {
   members: MemberStore;
   invites: InviteStore;
   quota: QuotaStore;
-  mailer: RecordingMailer;
+  /**
+   * The mailer the app was wired with. Typed as the PORT, not as the recording
+   * fixture, because a test may inject the real HTTP adapter pointed at a local
+   * server; a test wanting `sent` should hold its own `RecordingMailer`.
+   */
+  mailer: Mailer;
   /** The throwaway directory holding the member and invite store files. */
   stateDir: string;
   logLines: CapturedLogLine[];
@@ -198,7 +212,7 @@ export interface StartTestAppOptions {
   quota?: QuotaStore;
   now?: () => Date;
   logger?: Logger;
-  mailer?: RecordingMailer;
+  mailer?: Mailer;
   /** Reuse a state directory across two `startTestApp` calls, to test a second boot. */
   stateDir?: string;
   /**

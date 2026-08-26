@@ -21,8 +21,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   adminAuth,
+  createRecordingMailer,
   makeAdminToken,
   startTestApp,
+  type RecordingMailer,
   type TestApp,
   type TestResponse,
 } from '../support/app-harness.js';
@@ -34,10 +36,14 @@ const CLIENT_BASE_URL = 'https://app.example.test';
 
 let app: TestApp | null = null;
 let upstream: FakeUpstream | null = null;
+// Held here rather than read back off the app, whose `mailer` is the port type.
+let mailer: RecordingMailer = createRecordingMailer();
 
 beforeEach(async () => {
   upstream = await startFakeUpstream();
+  mailer = createRecordingMailer();
   app = await startTestApp({
+    mailer,
     upstreamBaseUrl: upstream.baseUrl,
     config: {
       adminToken: ADMIN_TOKEN,
@@ -105,10 +111,10 @@ describe('creating an invite', () => {
 
     await createInvite(started);
 
-    expect(started.mailer.sent).toHaveLength(0);
+    expect(mailer.sent).toHaveLength(0);
   });
 
-  it('reports emailed:false when an address was given but SMTP is not configured', async () => {
+  it('reports emailed:false when an address was given but no mail transport is configured', async () => {
     // Not an error: the invite exists and the operator has the link in front of
     // them, so failing the request would destroy a usable invite.
     const { app: started } = harness();

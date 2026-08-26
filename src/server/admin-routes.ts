@@ -349,8 +349,14 @@ interface MaybeSendInviteParts {
 }
 
 /**
- * Sends the invite email if — and only if — an address was given AND SMTP is
- * configured AND both link halves are set. Returns whether it went out.
+ * Sends the invite email if — and only if — an address was given AND a mail
+ * transport is configured AND both link halves are set. Returns whether it went
+ * out.
+ *
+ * The transport is not named here on purpose: `config.mail` is `null` or it is
+ * not, and which of SMTP or the HTTP API is behind the `Mailer` is settled at
+ * boot. A check that asked for SMTP specifically is what would leave an
+ * HTTP-configured gateway silently refusing to email.
  *
  * NEVER THROWS. A send failure must not fail the request: the invite is already
  * created and the operator already has the link in the response, so turning a
@@ -360,7 +366,7 @@ interface MaybeSendInviteParts {
 async function maybeSendInvite(parts: MaybeSendInviteParts): Promise<boolean> {
   const { config, mailer, logger, invite, token, email } = parts;
   if (email === undefined) return false;
-  if (config.smtp === null) return false;
+  if (config.mail === null) return false;
   if (config.gatewayPublicUrl === null || config.clientBaseUrl === null) return false;
 
   const message = buildInviteMessage({
@@ -384,9 +390,10 @@ async function maybeSendInvite(parts: MaybeSendInviteParts): Promise<boolean> {
     logger.info('Invite email sent', { inviteId: invite.id });
     return true;
   } catch {
-    // The error itself is discarded rather than logged: an SMTP library's
+    // The error itself is discarded rather than logged: a mail library's
     // message routinely quotes the envelope it was rejected on, which is the
-    // recipient's address.
+    // recipient's address, and an HTTP mail API's error body echoes the whole
+    // request back.
     logger.warn('Invite email could not be sent; the link in the response is still valid', {
       inviteId: invite.id,
     });

@@ -129,8 +129,9 @@ already produced a member, and the next redemption produces another. One lost in
 operator thirty seconds; an invite that mints members repeatedly is an unbounded spend.
 
 **Copy-link is the primary flow.** `POST /admin/invites` always returns the link and the
-token, whether or not mail was sent. Most self-hosters have no SMTP and never will, and a flow
-that only worked with a mail server would put the feature out of their reach. Email is an
+token, whether or not mail was sent. Most self-hosters have no mail transport configured and
+never will, and a flow that only worked with a mail server would put the feature out of their
+reach. Email is an
 optional extra: a failed send returns `emailed: false` with a 201, because the invite already
 exists and the operator already has the link — failing the request would destroy a working
 invite and teach them to retry, creating a second one.
@@ -198,14 +199,21 @@ by the same mechanisms:
 Nothing added here logs a request body, and the new surfaces carry their own version of the
 rule: the invite link is a credential and is never logged; the recipient address is never
 logged; an SMTP error is discarded rather than logged, because a mail library's message
-routinely quotes the envelope it was rejected on — which is the recipient's address.
+routinely quotes the envelope it was rejected on — which is the recipient's address. The HTTP
+mail transport added later carries the same rule from the other side: it never reads the
+response body at all, and its error carries the numeric status code and nothing else, because
+a mail API's error body echoes the request back — recipient, subject, and the html that holds
+the invite link.
 
 ## Consequences
 
 - **A dependency.** `nodemailer` is now in the tree, for a feature most operators will not
   configure. It is CommonJS, so it is on the esbuild `external` list; inlining it into the ESM
   bundle produces a dynamic-require shim that would not throw until an operator with SMTP
-  configured tried to send an invite — in production, on somebody else's box.
+  configured tried to send an invite — in production, on somebody else's box. The HTTP mail
+  transport added afterwards deliberately adds no second dependency: it is one call to Node's
+  global `fetch`, which is undici already, so it touches neither `package.json` nor that
+  `external` list.
 - **`pnpm mint-token` now writes.** Its previous refusal to touch a file was a defence against
   corrupting a hand-edited registry. The store removed that hazard rather than working around
   it: writes are read-modify-write under a lock followed by an atomic rename, and a file that

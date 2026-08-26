@@ -98,6 +98,41 @@ export interface SmtpConfig {
 }
 
 /**
+ * A Resend-compatible HTTP mail API, ALL OR NOTHING for the same reason as
+ * `SmtpConfig`.
+ *
+ * THE OPERATOR SUPPLIES THE FULL SEND ENDPOINT, not a host and not a provider
+ * name. Resend posts to `https://api.resend.com/emails`, our own pigeon service
+ * to `http://pigeon:3601/v1/emails`, and the two APIs are otherwise the same
+ * request. Taking the whole URL means that difference is a value an operator
+ * writes once in a `.env` file, rather than a branch in this service that has
+ * to be extended for every provider anybody ever points it at.
+ */
+export interface HttpMailConfig {
+  /** Absolute http(s) URL of the SEND endpoint itself, e.g. `.../v1/emails`. */
+  readonly url: string;
+  /** Bearer credential. Never logged, never put in an error — same rule as `UPSTREAM_API_KEY`. */
+  readonly apiKey: string;
+  /** The `From:` address. */
+  readonly from: string;
+}
+
+/**
+ * WHICH TRANSPORT, AS A DISCRIMINATED UNION RATHER THAN TWO NULLABLE FIELDS.
+ *
+ * Two independent `SmtpConfig | null` and `HttpMailConfig | null` fields would
+ * make "both set" and "neither set" representable, and every call site would
+ * then carry its own precedence rule — which is exactly the silent policy this
+ * config refuses to have. The union makes the invalid states unrepresentable,
+ * and the transport is chosen once, at boot, by which block the operator filled
+ * in. There is no `MAIL_PROVIDER` variable: a fourth variable is a fourth thing
+ * that can disagree with the other three.
+ */
+export type MailConfig =
+  | { readonly transport: 'smtp'; readonly smtp: SmtpConfig }
+  | { readonly transport: 'http'; readonly http: HttpMailConfig };
+
+/**
  * Where org mode puts the images it stores. S3-COMPATIBLE, NOT AWS-SPECIFIC:
  * `endpoint` is mandatory precisely so MinIO, Garage, Ceph and a clinic's own
  * on-premise object store are first-class rather than a workaround. A gateway
@@ -197,8 +232,13 @@ export interface Config {
   gatewayPublicUrl: string | null;
   /** Where the openplate client lives. Required to build an invite link. */
   clientBaseUrl: string | null;
-  /** `null` when no SMTP is configured: invites are then copy-link only. */
-  smtp: SmtpConfig | null;
+  /**
+   * WHICH MAIL TRANSPORT, OR `null` FOR THE COPY-LINK-ONLY DEPLOYMENT — which
+   * is what most self-hosters run, and the flow the invite endpoint is built
+   * around. Exactly one transport can be configured; two blocks is a boot
+   * failure rather than a precedence rule nobody can see.
+   */
+  mail: MailConfig | null;
 }
 
 /**
@@ -238,6 +278,13 @@ function splitOrigins(value: string): string[] {
 
 /** The five variables that make up the SMTP block. All or none — see `SmtpConfig`. */
 const SMTP_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const;
+
+/**
+ * The three variables that make up the HTTP mail block. All or none — see
+ * `HttpMailConfig`. There is no fourth variable naming a provider: which
+ * provider it is, is already in the URL.
+ */
+const MAIL_API_KEYS = ['MAIL_API_URL', 'MAIL_API_KEY', 'MAIL_API_FROM'] as const;
 
 /**
  * The audit block's REQUIRED members: every one of these must be set when
@@ -352,6 +399,15 @@ const EnvSchemaFields = z.object({
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
   SMTP_FROM: z.string().min(1).optional(),
+
+  // The Resend-compatible alternative to the SMTP block. The URL is the FULL
+  // send endpoint, so the path difference between providers never reaches the
+  // code — see `HttpMailConfig`. `MAIL_API_KEY` gets a bare `min(1)` for the
+  // same reason `UPSTREAM_API_KEY` does: a richer check would be tempted to
+  // quote what it rejected, and this value can send mail as the operator.
+  MAIL_API_URL: absoluteHttpUrl.optional(),
+  MAIL_API_KEY: z.string().min(1, { message: 'must not be empty' }).optional(),
+  MAIL_API_FROM: z.string().min(1).optional(),
 });
 
 /**
@@ -378,23 +434,56 @@ const EnvSchema = EnvSchemaFields.superRefine((raw, ctx) => {
     }
   }
 
+  const configuredMailApiKeys = MAIL_API_KEYS.filter((key) => raw[key] !== undefined);
+  const isMailApiPartial =
+    configuredMailApiKeys.length > 0 && configuredMailApiKeys.length < MAIL_API_KEYS.length;
+
+  if (isMailApiPartial) {
+    for (const key of MAIL_API_KEYS) {
+      if (raw[key] !== undefined) continue;
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: 'is required once any other MAIL_API_* variable is set (the block is all-or-nothing)',
+      });
+    }
+  }
+
+  const isSmtpConfigured = configuredSmtpKeys.length === SMTP_KEYS.length;
+  const isMailApiConfigured = configuredMailApiKeys.length === MAIL_API_KEYS.length;
+
+  // TWO WHOLE BLOCKS IS A BOOT FAILURE, NOT A PRECEDENCE RULE. Picking one and
+  // ignoring the other would be a policy the operator cannot see: they would
+  // read their own `.env`, see the transport they just configured, and watch
+  // mail leave through the other one. An operator with both set has either
+  // half-finished a migration or edited the wrong file, and both deserve the
+  // same answer this module gives everything else — say so, once, at boot.
+  if (isSmtpConfigured && isMailApiConfigured) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAIL_API_URL'],
+      message:
+        'cannot be set alongside the SMTP_* block — configure exactly one mail transport: either SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/SMTP_FROM or MAIL_API_URL/MAIL_API_KEY/MAIL_API_FROM',
+    });
+  }
+
   // An invite email whose link points nowhere is worse than no email: the
   // recipient gets a broken button and the invite is already spent from the
-  // operator's point of view. So mail configured at all demands both halves of
-  // the link — see `mail/invite-message.ts`.
-  const isSmtpConfigured = configuredSmtpKeys.length === SMTP_KEYS.length;
-  if (isSmtpConfigured && raw.GATEWAY_PUBLIC_URL === undefined) {
+  // operator's point of view. So mail configured at all — through EITHER
+  // transport — demands both halves of the link. See `mail/invite-message.ts`.
+  const isMailConfigured = isSmtpConfigured || isMailApiConfigured;
+  if (isMailConfigured && raw.GATEWAY_PUBLIC_URL === undefined) {
     ctx.addIssue({
       code: 'custom',
       path: ['GATEWAY_PUBLIC_URL'],
-      message: 'is required when SMTP is configured — an invite email needs a link to this gateway',
+      message: 'is required when mail is configured — an invite email needs a link to this gateway',
     });
   }
-  if (isSmtpConfigured && raw.CLIENT_BASE_URL === undefined) {
+  if (isMailConfigured && raw.CLIENT_BASE_URL === undefined) {
     ctx.addIssue({
       code: 'custom',
       path: ['CLIENT_BASE_URL'],
-      message: 'is required when SMTP is configured — an invite email needs a link to the client',
+      message: 'is required when mail is configured — an invite email needs a link to the client',
     });
   }
 
@@ -501,7 +590,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     audit: parseAudit(raw),
     gatewayPublicUrl: raw.GATEWAY_PUBLIC_URL ?? null,
     clientBaseUrl: raw.CLIENT_BASE_URL ?? null,
-    smtp: parseSmtp(raw),
+    mail: parseMail(raw),
   };
 }
 
@@ -554,6 +643,36 @@ function parseAudit(raw: z.infer<typeof EnvSchemaFields>): AuditConfig | null {
     maxBodyBytes: raw.AUDIT_MAX_BODY_BYTES ?? DEFAULT_AUDIT_MAX_BODY_BYTES,
     recordFile: raw.AUDIT_STORE_FILE ?? DEFAULT_AUDIT_STORE_FILE,
   };
+}
+
+/**
+ * Picks the transport from whichever block is present.
+ *
+ * SELECTION IS BY INFERENCE, and the order below is not a precedence: the
+ * `superRefine` has already refused an environment carrying both blocks, so at
+ * most one of these two returns a value. Reading the second `if` as a fallback
+ * is the misreading to guard against — there is nothing to fall back from.
+ */
+function parseMail(raw: z.infer<typeof EnvSchemaFields>): MailConfig | null {
+  const smtp = parseSmtp(raw);
+  if (smtp !== null) return { transport: 'smtp', smtp };
+
+  const http = parseHttpMail(raw);
+  if (http !== null) return { transport: 'http', http };
+
+  return null;
+}
+
+/** `null` unless the whole block is present — the `superRefine` rejects the partial states. */
+function parseHttpMail(raw: z.infer<typeof EnvSchemaFields>): HttpMailConfig | null {
+  const { MAIL_API_URL, MAIL_API_KEY, MAIL_API_FROM } = raw;
+  if (MAIL_API_URL === undefined || MAIL_API_KEY === undefined || MAIL_API_FROM === undefined) {
+    return null;
+  }
+  // No `stripTrailingSlashes` here, unlike every other URL in this file: this
+  // one is a complete endpoint that is POSTed to verbatim, not a base a path is
+  // appended to, so there is nothing for a trailing slash to double against.
+  return { url: MAIL_API_URL, apiKey: MAIL_API_KEY, from: MAIL_API_FROM };
 }
 
 function parseSmtp(raw: z.infer<typeof EnvSchemaFields>): SmtpConfig | null {

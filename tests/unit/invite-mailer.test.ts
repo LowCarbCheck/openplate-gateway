@@ -45,7 +45,10 @@ afterEach(async () => {
 });
 
 async function startWithMailer(mailer: RecordingMailer): Promise<TestApp> {
-  app = await startTestApp({ config: { ...LINK_CONFIG, smtp: SMTP }, mailer });
+  app = await startTestApp({
+    config: { ...LINK_CONFIG, mail: { transport: 'smtp', smtp: SMTP } },
+    mailer,
+  });
   return app;
 }
 

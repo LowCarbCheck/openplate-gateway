@@ -60,7 +60,7 @@ describe('the defaults, so an existing .env keeps working across the upgrade', (
       gatewayMode: 'family',
       gatewayPublicUrl: null,
       clientBaseUrl: null,
-      smtp: null,
+      mail: null,
       memberStoreFile: DEFAULT_MEMBER_STORE_FILE,
       inviteStoreFile: DEFAULT_INVITE_STORE_FILE,
     });
@@ -94,12 +94,15 @@ describe('the SMTP block is all-or-nothing', () => {
   it('accepts the whole block, with the link URLs it needs', () => {
     const config = loadConfig({ ...MINIMAL, ...SMTP, ...LINKS });
 
-    expect(config.smtp).toEqual({
-      host: 'smtp.example.test',
-      port: 587,
-      user: 'gateway',
-      pass: SMTP.SMTP_PASS,
-      from: 'gateway@example.test',
+    expect(config.mail).toEqual({
+      transport: 'smtp',
+      smtp: {
+        host: 'smtp.example.test',
+        port: 587,
+        user: 'gateway',
+        pass: SMTP.SMTP_PASS,
+        from: 'gateway@example.test',
+      },
     });
   });
 
@@ -132,7 +135,7 @@ describe('the SMTP block is all-or-nothing', () => {
   it('allows the link URLs WITHOUT SMTP, because copy-link is the primary flow', () => {
     const config = loadConfig({ ...MINIMAL, ...LINKS });
 
-    expect(config.smtp).toBeNull();
+    expect(config.mail).toBeNull();
     expect(config.gatewayPublicUrl).toBe('https://gateway.example.test');
     expect(config.clientBaseUrl).toBe('https://app.example.test');
   });

@@ -162,9 +162,10 @@ paste and nothing for you to explain.
 thing sitting in your chat history afterwards is worthless. Pass `"ttlHours": 168` for up to a
 week if somebody is away.
 
-**To email it instead**, add `"email": "alex@example.com"` and configure SMTP (see
-`.env.example`). The response still contains the link, so you are never stuck if the mail does
-not arrive — `"emailed": false` tells you it did not.
+**To email it instead**, add `"email": "alex@example.com"` and configure a mail transport —
+either SMTP or a Resend-compatible HTTP mail API, whichever you have (see `.env.example`; you
+may configure one, not both). The response still contains the link, so you are never stuck if
+the mail does not arrive — `"emailed": false` tells you it did not.
 
 **To see outstanding invites:** open `/admin/ui`, or:
 

@@ -110,7 +110,7 @@ async function main(): Promise<void> {
 
   const quota = createFileQuotaStore(config.quotaStoreFile);
   const invites = createFileInviteStore(config.inviteStoreFile);
-  const mailer = createMailer(config.smtp);
+  const mailer = createMailer(config.mail);
 
   // THE MODE, SAID PLAINLY AND EARLY. It is the first thing an operator should
   // see in the log, because it is the one setting that changes what happens to
@@ -146,8 +146,10 @@ async function main(): Promise<void> {
       members: activeMembers,
       mode: config.gatewayMode,
       adminApiEnabled: config.adminToken !== null,
-      // Whether mail is configured, never where or as whom.
-      smtpConfigured: config.smtp !== null,
+      // Whether mail can be sent AT ALL, through either transport — never
+      // where, never as whom, never which credential. An operator reading this
+      // line wants to know whether an invite with an address will go anywhere.
+      mailConfigured: config.mail !== null,
       upstreamHost: upstreamHostOf(config.upstreamBaseUrl),
       rateLimitPerMinute: config.rateLimitPerMinute,
       upstreamTimeoutMs: config.upstreamTimeoutMs,
