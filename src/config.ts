@@ -533,6 +533,28 @@ function parseCorsAllowedOrigins(raw: string): CorsAllowedOrigins {
 }
 
 /**
+ * Appended to EVERY aggregated configuration failure, unconditionally.
+ *
+ * This service has no `dotenv` and is not going to grow one: a proxy whose
+ * selling point is a four-package dependency list does not add a loader for a
+ * development convenience. `.env` is read by `docker compose`, through
+ * `env_file:` in `docker/compose.yml`, and by nothing else — `pnpm dev` and
+ * `pnpm start` see only what the surrounding shell exported.
+ *
+ * That gap cost a real debugging session: a complete, correct `.env` sitting
+ * beside a gateway dying on `UPSTREAM_BASE_URL: is required`. The moment an
+ * operator reads that message is the moment the explanation is worth something,
+ * so the message carries it.
+ *
+ * IT IS A CONSTANT, and deliberately not a check. Probing for a `.env` file
+ * would put a disk read inside the one module that must stay a pure function of
+ * the env bag it is handed — and it would be actively misleading in a
+ * container, where the file is legitimately absent and the variables are set.
+ */
+const DOTENV_NOTE =
+  'note: a .env file is read only by docker compose — export variables in your shell for pnpm dev';
+
+/**
  * Builds the config from an arbitrary env bag. Throws a single `Error` naming
  * every invalid or missing variable — never a value.
  */
@@ -564,7 +586,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
         return `${issue.path.join('.') || '(root)'}: ${isAbsent ? 'is required' : issue.message}`;
       })
       .join('; ');
-    throw new Error(`Invalid configuration — ${details} (see .env.example)`);
+    throw new Error(`Invalid configuration — ${details} (see .env.example; ${DOTENV_NOTE})`);
   }
   const raw = parsed.data;
 

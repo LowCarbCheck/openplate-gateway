@@ -56,6 +56,22 @@ describe('loadConfig', () => {
     expect(message).toContain('.env.example');
   });
 
+  it('tells the operator that .env is a docker compose file, not a dotenv one', () => {
+    // The defect this pins: a complete, correct .env sitting beside a gateway
+    // dying on "UPSTREAM_BASE_URL: is required". There is no dotenv here — only
+    // docker compose reads that file — and the aggregated boot failure is the
+    // exact text an operator is staring at when that matters.
+    let message = '';
+    try {
+      loadConfig({});
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('.env file is read only by docker compose');
+    expect(message).toContain('pnpm dev');
+  });
+
   it('says "is required" for an absent variable rather than a type-bug sentence', () => {
     expect(() => loadConfig({})).toThrow(/UPSTREAM_BASE_URL: is required/);
   });
