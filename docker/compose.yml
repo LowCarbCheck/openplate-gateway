@@ -44,7 +44,7 @@ services:
       # .env instead of here — either works, this is only for a topology-only
       # override.
       # GATEWAY_ADMIN_TOKEN: 'CHANGE_ME'
-      # GATEWAY_PUBLIC_URL: 'http://gateway.lan:3602'
+      # GATEWAY_PUBLIC_URL: 'https://gateway.lan:3602'   # https: required off localhost
       # CLIENT_BASE_URL: 'https://app.openplate.example'
       # ── Organisation mode (OFF by default) ──────────────────────────────────
       # Turns this into an audited gateway for organisations accountable for
@@ -60,7 +60,10 @@ services:
       # S3_FORCE_PATH_STYLE: 'true'
       # AUDIT_RETENTION_DAYS: '30'
       # AUDIT_MAX_BODY_BYTES: '20971520'
-      # AUDIT_STORE_FILE: '/app/state/audit-log.jsonl'
+      # Pinned like the four stores above: the default is './audit-log.jsonl',
+      # which lands on the container's writable layer instead of the volume, so
+      # `docker rm` would take the audit log with it.
+      AUDIT_STORE_FILE: '/app/state/audit-log.jsonl'
     ports:
       - '127.0.0.1:3602:3602'
     volumes:

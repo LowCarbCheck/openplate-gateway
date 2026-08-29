@@ -108,12 +108,23 @@ Two more values let the gateway build an invite link. Set them if you want to in
 by link, which is the easy way:
 
 ```
-GATEWAY_PUBLIC_URL=http://gateway.lan:3602
+GATEWAY_PUBLIC_URL=https://gateway.lan:3602
 CLIENT_BASE_URL=https://app.openplate.example
 ```
 
 `GATEWAY_PUBLIC_URL` is how *other people on your network* reach the gateway — not
 `localhost`, which only means "this machine" to them.
+
+**An invite link needs `https:`.** openplate refuses an invite whose gateway address is plain
+`http:` on anything but `localhost` or `127.0.0.1`, and the member sees an "invalid link" card
+with nothing to act on. A LAN hostname therefore needs TLS in front of it — a reverse proxy
+with a certificate, or Tailscale Serve. If you would rather not set that up, skip invites and
+hand out tokens directly (step 5): manual entry in openplate does accept a plain `http://` LAN
+address.
+
+If your household uses a **hosted** openplate instance rather than one you run yourself, its
+operator must also add your gateway's origin to `CSP_CONNECT_EXTRA` in openplate's own config.
+Without that the browser blocks the connection and the invite reports itself as blocked.
 
 ### 3. Start it
 
@@ -179,9 +190,13 @@ invite you have sent, so you can see at a glance whether it expired, was already
 was revoked, without going near the logs. To withdraw one before it is used,
 `DELETE /admin/invites/<id>` (or the matching button in `/admin/ui`).
 
-**Second device, or a lost phone:** send that member a fresh invite. Invites are per member,
-not per device — redeeming a new one does not touch their existing token or their quota, it
-just gives them another way to connect. Nothing needs to be revoked first.
+**Second device, or a lost phone:** invite them again under a **new member id** — `alex-phone2`
+rather than `alex`. Every member id may be invited once: a second invite for an id that already
+exists is refused with a `409`, whether that member is active or revoked. A second id also gives
+the two devices separate allowances, which is usually what you want.
+
+Revoking first does not free the old id. Revocation is a tombstone, kept on purpose so a token
+cannot be quietly reinstated.
 
 ### 5. Or hand someone a token directly
 
@@ -189,8 +204,22 @@ If you would rather not use invites at all:
 
 ```bash
 pnpm install
-pnpm mint-token alex 50
+MEMBER_STORE_FILE=./state/member-store.json pnpm mint-token alex 50
 ```
+
+Two things about this command, both of which bite silently.
+
+`mint-token` runs through `tsx` from a **source checkout**. Neither `tsx` nor `scripts/` is in
+the shipped image, so `docker compose exec gateway pnpm mint-token` does not work.
+
+It writes whatever `MEMBER_STORE_FILE` names, defaulting to `./member-store.json` in the
+working directory. The container's store is `/app/state/member-store.json` on the
+`gateway-state` named volume, which a host checkout cannot open at all — mint into the wrong
+file and the new member simply fails to authenticate, with nothing pointing at the cause.
+
+So on a Docker install, prefer the admin API above. If you deliberately run with no admin
+token, first change `gateway-state` in `docker/compose.yml` to a bind mount
+(`- ./state:/app/state`); then the command above writes the same file the container reads.
 
 This prints the token **once** and adds the member to the store. It is not saved anywhere and
 cannot be recovered — if it is lost, mint a new one. **A running gateway picks the new member
@@ -199,7 +228,8 @@ up on the next request; no restart.**
 That person then opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
 provider, and enters:
 
-- **Base URL** — the gateway, e.g. `http://gateway.lan:3602/v1`
+- **Base URL** — the gateway, e.g. `http://gateway.lan:3602/v1`. Manual entry accepts a plain
+  `http://` LAN address; invite links do not (see step 2).
 - **API key** — their own token
 
 Take one photo to confirm it works.
@@ -233,9 +263,11 @@ because the gateway is the only thing that ever accepted it.
 The member is kept as a revoked record rather than deleted. That is on purpose — it is what
 stops the token being quietly reinstated by an old `members.json` or a restored backup.
 
-**To change someone's allowance**, revoke them and invite them again with the new limit. The
-gateway does not edit a live member's limit in place, so there is never a moment where it is
-unclear which cap applied to which request.
+**To change someone's allowance**, revoke them and invite them again **under a new member id**
+— `alex2` rather than `alex`. A revoked record is a tombstone that is never deleted, so the old
+id stays taken and a second invite for it is refused with a `409`. The gateway does not edit a
+live member's limit in place either, so there is never a moment where it is unclear which cap
+applied to which request.
 
 **Allowances reset at UTC midnight**, not at your local midnight. A household can span time
 zones, and a local reset would quietly give someone in another zone a second allowance.

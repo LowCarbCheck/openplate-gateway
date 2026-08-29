@@ -73,6 +73,11 @@ file first if you run them:
 set -a && . ./.env && set +a && pnpm dev
 ```
 
+For invite **links** you also need `GATEWAY_PUBLIC_URL` and `CLIENT_BASE_URL` in `.env`.
+Without both, an invite is still created but carries no link to send. `GATEWAY_PUBLIC_URL`
+must be `https:` unless it is `localhost` — openplate rejects a plain-`http` LAN address in an
+invite link.
+
 Open `http://localhost:3602/admin/ui`, sign in with `GATEWAY_ADMIN_TOKEN`, and create an
 invite. Send the link it gives you to the member — they open it and openplate connects
 itself, with nothing to paste.
@@ -91,8 +96,15 @@ restart needed, either way:
 
 ```bash
 pnpm install
-pnpm mint-token alex 50     # member id, requests per day
+MEMBER_STORE_FILE=./state/member-store.json pnpm mint-token alex 50   # member id, requests per day
 ```
+
+`mint-token` runs through `tsx` from a **source checkout** — neither `tsx` nor `scripts/` is in
+the shipped image, so `docker compose exec` cannot run it. It also writes whatever
+`MEMBER_STORE_FILE` names, and a bare `pnpm mint-token` writes `./member-store.json`, which a
+containerised gateway never reads: its store is `/app/state/member-store.json` on the
+`gateway-state` volume. To mint against a Docker install, change that volume to a bind mount
+(`- ./state:/app/state`) so the two sides name the same file.
 
 That person then opens openplate → **Settings → AI**, chooses the **OpenAI-compatible**
 provider, and enters:
