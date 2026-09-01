@@ -215,3 +215,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...MINIMAL, LOG_LEVEL: 'verbose' })).toThrow(/LOG_LEVEL/);
   });
 });
+
+/**
+ * `GATEWAY_LANGUAGE` (M167/03) — the console and the invite mail.
+ */
+describe('GATEWAY_LANGUAGE', () => {
+  it('is English when the operator sets nothing', () => {
+    expect(loadConfig({ ...MINIMAL }).language).toBe('en');
+  });
+
+  it('accepts the two shipped languages', () => {
+    expect(loadConfig({ ...MINIMAL, GATEWAY_LANGUAGE: 'de' }).language).toBe('de');
+    expect(loadConfig({ ...MINIMAL, GATEWAY_LANGUAGE: 'en' }).language).toBe('en');
+  });
+
+  it('refuses a language we do not ship rather than quietly serving English', () => {
+    // An operator who wrote `fr` wants French. Answering with English would be
+    // wrong in every mail this gateway ever sends, and silent.
+    expect(() => loadConfig({ ...MINIMAL, GATEWAY_LANGUAGE: 'fr' })).toThrow();
+  });
+});

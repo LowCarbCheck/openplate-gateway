@@ -15,6 +15,24 @@
  * because a client retries on one and not the other: `badGateway` means the
  * provider answered and we could not use the answer; `gatewayTimeout` means it
  * never answered inside our budget.
+ *
+ * ── THESE MESSAGES STAY ENGLISH, AND THAT IS A DECISION (M167/03) ───────────
+ * `GATEWAY_LANGUAGE` translates the two HUMAN surfaces — the admin console and
+ * the invite email. It deliberately does NOT reach here, because these strings
+ * are machine-facing: they are read by a client, and a client must branch on
+ * the STATUS, never on the prose. That is `openplate-sync/PROTOCOL.md` §4's
+ * rule and it applies here word for word.
+ *
+ * Translating them would actively invite the thing that rule forbids. A
+ * localised message is a message that changes, and any client that had come to
+ * match on the English text would break the day an operator set the variable —
+ * silently, and only on their instance. The openplate client already renders
+ * its own translated wording per status, so a German user reads German either
+ * way; what changes is only whether the sentence that crossed the wire was
+ * something a program could rely on.
+ *
+ * The one message a person reads unmediated is the admin console's, and the
+ * console translates it there, out of its own dictionary.
  */
 
 export class HttpError extends Error {

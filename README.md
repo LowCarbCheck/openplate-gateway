@@ -78,6 +78,9 @@ Without both, an invite is still created but carries no link to send. `GATEWAY_P
 must be `https:` unless it is `localhost` — openplate rejects a plain-`http` LAN address in an
 invite link.
 
+The console and the invite email speak English unless you set `GATEWAY_LANGUAGE=de`.
+That one variable covers both; API error messages stay English by design (`src/errors.ts`).
+
 Open `http://localhost:3602/admin/ui`, sign in with `GATEWAY_ADMIN_TOKEN`, and create an
 invite. Send the link it gives you to the member — they open it and openplate connects
 itself, with nothing to paste.

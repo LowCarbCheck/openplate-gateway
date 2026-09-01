@@ -32,6 +32,7 @@
 import { z } from 'zod';
 import type { LogLevel } from './logger.js';
 import type { GatewayMode } from './member-store.js';
+import { GATEWAY_LANGUAGES, type GatewayLanguage } from './i18n.js';
 
 /** Not 3600/3601 — those are taken by neighbouring services on the same host. */
 export const DEFAULT_PORT = 3602;
@@ -211,6 +212,12 @@ export interface Config {
   adminToken: string | null;
   /** Shown to members by `/v1/gateway/info`, so they can tell two instances apart. */
   gatewayName: string;
+  /**
+   * Language of the admin console and the invite email (`GATEWAY_LANGUAGE`).
+   * `en` unless the operator chose otherwise. API error prose is not covered
+   * by it — see `src/errors.ts`.
+   */
+  language: GatewayLanguage;
   /** The model id members should ask for, or `null` if the operator has not pinned one. */
   advertisedModel: string | null;
   /**
@@ -366,6 +373,14 @@ const EnvSchemaFields = z.object({
     })
     .optional(),
   GATEWAY_NAME: z.string().min(1).default(DEFAULT_GATEWAY_NAME),
+  // The language of the two HUMAN-FACING surfaces: the admin console and the
+  // invite email. Not `Accept-Language`: the invite email has no request to
+  // negotiate from, and a gateway whose console is German while its mail is
+  // English is worse than one that is consistently English. One operator, one
+  // choice. An unsupported code fails the boot like every other malformed
+  // variable here — see `src/i18n.ts` for why there is no runtime substitution.
+  // API error prose is deliberately NOT covered; see `src/errors.ts`.
+  GATEWAY_LANGUAGE: z.enum(GATEWAY_LANGUAGES).default('en'),
   GATEWAY_ADVERTISED_MODEL: z.string().min(1).optional(),
   GATEWAY_PUBLIC_URL: absoluteHttpUrl.optional(),
   CLIENT_BASE_URL: absoluteHttpUrl.optional(),
@@ -605,6 +620,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     corsAllowedOrigins: parseCorsAllowedOrigins(raw.CORS_ALLOWED_ORIGINS),
     adminToken: raw.GATEWAY_ADMIN_TOKEN ?? null,
     gatewayName: raw.GATEWAY_NAME,
+    language: raw.GATEWAY_LANGUAGE,
     advertisedModel: raw.GATEWAY_ADVERTISED_MODEL ?? null,
     // `family` unless the operator explicitly asked for the other thing. The
     // default is the mode that stores nothing — see ADR-0003.

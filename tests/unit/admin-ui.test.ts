@@ -13,6 +13,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeAdminToken, startTestApp, type TestApp } from '../support/app-harness.js';
+import { renderAdminUiPage } from '../../src/server/admin-ui.js';
+import { stringsFor } from '../../src/i18n.js';
 
 const ADMIN_TOKEN = makeAdminToken();
 
@@ -154,4 +156,144 @@ describe('with an admin token configured', () => {
 
     expect(response.status).toBe(401);
   });
+});
+
+/**
+ * The German render (M167/03).
+ *
+ * The page is one string built by hand, so the failure modes are string
+ * failures: a label that stayed English because its literal was missed, an
+ * umlaut mangled on the way into the document, or the dictionary breaking the
+ * inline `<script>` it is injected into. None of those is a type error and none
+ * of them throws.
+ */
+/** How many times a pattern occurs in a rendered page. */
+const count = (html: string, needle: RegExp) => (html.match(needle) ?? []).length;
+
+describe('renderAdminUiPage — German', () => {
+  const de = renderAdminUiPage('test-nonce', 'de');
+  const en = renderAdminUiPage('test-nonce', 'en');
+
+  it('declares the language to the browser', () => {
+    expect(de).toContain('<html lang="de">');
+    expect(en).toContain('<html lang="en">');
+  });
+
+  it('renders every dictionary string the page has a place for', () => {
+    // Asserted against the DICTIONARY, not against hardcoded German. The German
+    // is machine-translated and re-runnable (see `src/i18n.ts`), so a test that
+    // pinned the exact wording would break on every re-run and teach whoever
+    // re-ran it to edit assertions rather than read them. What must hold is
+    // that the page renders what the dictionary says, whatever that says.
+    const dict = stringsFor('de').console;
+    for (const key of ['heading', 'adminTokenLabel', 'unlock', 'membersHeading', 'invitesHeading'] as const) {
+      expect(de, `missing from the page: ${key}`).toContain(dict[key]);
+    }
+  });
+
+  it('leaves no English label behind in the German page', () => {
+    // The exact strings the English page shows in the same places. Any one of
+    // them surviving means a literal was missed rather than translated.
+    for (const english of [
+      '>Gateway admin<',
+      '>Admin token<',
+      '>Unlock<',
+      '>Members<',
+      '>Invites<',
+      '>Daily limit<',
+      '>Create member<',
+      '>Create invite<',
+      'No members yet',
+      'No invites yet',
+    ]) {
+      expect(de, `untranslated: ${english}`).not.toContain(english);
+    }
+  });
+
+  it('keeps umlauts and eszett intact rather than escaping or dropping them', () => {
+    // Every dictionary string that HAS a German-only character must survive
+    // with it intact. Derived from the dictionary so it keeps working when the
+    // translation is re-run and different strings carry the umlauts.
+    const dict = stringsFor('de').console;
+    const withUmlauts = Object.values(dict).filter((value) => /[äöüÄÖÜß]/.test(value));
+    expect(withUmlauts.length, 'no German string carries an umlaut — suspect').toBeGreaterThan(3);
+    for (const value of withUmlauts) {
+      expect(de, `mangled: ${value}`).toContain(value);
+    }
+    expect(de).not.toContain('&auml;');
+    expect(de).not.toContain('&szlig;');
+  });
+
+  it('does not let the dictionary break out of the inline script', () => {
+    // The dictionary is injected into a <script> block. A literal `</script>`
+    // in any string would close it early and put the rest of the page's own
+    // code into the document as text.
+    const scriptOpen = de.indexOf('<script nonce=');
+    const scriptClose = de.indexOf('</script>', scriptOpen);
+    const block = de.slice(scriptOpen, scriptClose);
+    expect(block).toContain('var T = ');
+    // Inside the block, every `<` from the dictionary is <-escaped.
+    expect(block).not.toMatch(/var T = \{[^\n]*</);
+  });
+
+  it('keeps the security properties the English page has', () => {
+    // The CSP is a header, not markup — what the DOCUMENT must still show is
+    // the nonce on both inline blocks and no external asset anywhere.
+    expect((de.match(/nonce="test-nonce"/g) ?? []).length).toBe(2);
+    // No external asset may have arrived with the translation.
+    expect(de).not.toMatch(/https?:\/\/[^"' ]+\.(css|js|woff2?|png|svg)/);
+  });
+
+  it('renders exactly the same structure in both languages', () => {
+    // Same number of form fields, rows and buttons — a translation must not
+    // add or lose a control.
+    expect(count(de, /<input /g)).toBe(count(en, /<input /g));
+    expect(count(de, /<button/g)).toBe(count(en, /<button/g));
+    expect(count(de, /<th>/g)).toBe(count(en, /<th>/g));
+  });
+});
+
+/**
+ * The page's OWN JavaScript, executed (M167/03).
+ *
+ * Everything in the inline script is a string on the server, so TypeScript
+ * never sees it and neither does the linter's type layer. That gap is not
+ * theoretical: this suite was written after a template-literal escape bug
+ * shipped `/{(w+)}/` into the browser instead of `/\{(\w+)\}/`. The page
+ * rendered, the console loaded, every markup assertion passed, and every
+ * substituted string — "Member {id} created", the revoke confirmations —
+ * would have shown the reader a literal `{id}`.
+ *
+ * So this extracts the page's `fill` and runs it.
+ */
+/** Pulls one function's source out of the inline script and makes it callable. */
+function extractFill(page: string): (t: string, v: Record<string, string | number>) => string {
+  const start = page.indexOf('function fill(template, values) {');
+  expect(start, 'fill() not found in the rendered page').toBeGreaterThan(-1);
+  const end = page.indexOf('\n  }', start);
+  const source = page.slice(start, end + 4);
+  // eslint-disable-next-line no-new-func -- the input is this module's own output
+  return new Function(`${source}; return fill;`)() as ReturnType<typeof extractFill>;
+}
+
+describe('the rendered page runs', () => {
+  for (const language of ['en', 'de'] as const) {
+    it(`${language}: substitutes a placeholder instead of printing it literally`, () => {
+      const fill = extractFill(renderAdminUiPage('n', language));
+      expect(fill('Member "{id}" created.', { id: 'ada' })).toBe('Member "ada" created.');
+    });
+
+    it(`${language}: substitutes into the real dictionary strings`, () => {
+      const page = renderAdminUiPage('n', language);
+      const fill = extractFill(page);
+      const dict = stringsFor(language).console;
+      const filled = fill(dict.memberCreated, { id: 'ada' });
+      expect(filled).toContain('ada');
+      expect(filled).not.toContain('{id}');
+
+      const answered = fill(dict.gatewayAnswered, { status: 503 });
+      expect(answered).toContain('503');
+      expect(answered).not.toContain('{status}');
+    });
+  }
 });

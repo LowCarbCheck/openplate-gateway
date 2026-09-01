@@ -185,7 +185,7 @@ export function createApp(deps: AppDeps): Express {
     // falls to the terminator below and 404s exactly like `/admin/members`.
     app.use(
       '/admin',
-      createAdminUiRoutes(),
+      createAdminUiRoutes(config.language),
       createAdminAuth({ adminToken: config.adminToken, logger }),
       adminRoutes,
     );

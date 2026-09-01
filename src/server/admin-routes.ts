@@ -376,6 +376,7 @@ async function maybeSendInvite(parts: MaybeSendInviteParts): Promise<boolean> {
     inviteToken: token,
     dailyLimit: invite.dailyLimit,
     expiresAt: invite.expiresAt,
+    language: config.language,
   });
 
   try {

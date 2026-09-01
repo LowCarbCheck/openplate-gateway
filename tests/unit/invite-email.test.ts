@@ -15,7 +15,8 @@
  * the real route.
  */
 import { describe, expect, it } from 'vitest';
-import { buildInviteLink, buildInviteMessage } from '../../src/mail/invite-message.js';
+import { buildInviteLink, buildInviteMessage, type InviteMessageInput } from '../../src/mail/invite-message.js';
+import { fill, stringsFor } from '../../src/i18n.js';
 
 const BASE = {
   gatewayName: 'The Family Gateway',
@@ -24,7 +25,8 @@ const BASE = {
   inviteToken: 'opgwi_abc123',
   dailyLimit: 25,
   expiresAt: '2026-09-01T12:00:00.000Z',
-};
+  language: 'en',
+} satisfies InviteMessageInput;
 
 describe('buildInviteLink', () => {
   it('builds the connect URL the client expects', () => {
@@ -120,5 +122,91 @@ describe('buildInviteMessage', () => {
 
     expect(message.text).toContain('not-a-date');
     expect(message.text).not.toContain('Invalid Date');
+  });
+});
+
+/**
+ * The German invite mail (M167/03).
+ *
+ * The one thing that can be wrong here and still send perfectly is the LINK —
+ * see this module's header. So the German case asserts the link is byte-identical
+ * to the English one: translation must change what the reader is told and
+ * nothing about where they are sent.
+ */
+/** Extracts the rendered href from an HTML part. */
+const href = (html: string) => /href="([^"]+)"/.exec(html)?.[1];
+
+describe('buildInviteMessage — German', () => {
+  const en = buildInviteMessage(BASE);
+  const de = buildInviteMessage({ ...BASE, language: 'de' });
+
+  it('sends the reader to exactly the same place', () => {
+    expect(de.link).toBe(en.link);
+    expect(de.text).toContain(en.link);
+    // The HTML part carries the link HTML-ESCAPED (`&` becomes `&amp;` in the
+    // query string), so compare the rendered href rather than the raw URL —
+    // asserting the raw one here would fail against correct code.
+    expect(href(de.html)).toBe(href(en.html));
+    expect(href(de.html)).toBeTruthy();
+  });
+
+  it('translates the subject and fills the gateway name into it', () => {
+    // Against the dictionary, not hardcoded German: the translation is
+    // machine-produced and re-runnable, so pinning the wording would make every
+    // re-run look like a regression. What must hold is that the SUBJECT comes
+    // from the German dictionary with the placeholder filled.
+    expect(de.subject).toBe(fill(stringsFor('de').mail.subject, { gateway: BASE.gatewayName }));
+    expect(de.subject).toContain(BASE.gatewayName);
+    expect(de.subject).not.toBe(en.subject);
+  });
+
+  it('translates both parts, not just one', () => {
+    // A mail whose plain part is German and whose HTML part is English is the
+    // failure a subject-line-only assertion would miss.
+    const mail = stringsFor('de').mail;
+    for (const part of [de.text, de.html]) {
+      expect(part).toContain(fill(mail.invitedTo, { gateway: BASE.gatewayName }));
+      expect(part).toContain(fill(mail.allowance, { limit: BASE.dailyLimit }));
+      expect(part).toContain(mail.privacy);
+    }
+  });
+
+  it('leaves no English sentence behind', () => {
+    for (const english of [
+      'You have been invited',
+      'Your allowance',
+      'This invite expires',
+      'Open this link',
+      'Your food diary stays',
+    ]) {
+      expect(de.text, `untranslated: ${english}`).not.toContain(english);
+      expect(de.html, `untranslated: ${english}`).not.toContain(english);
+    }
+  });
+
+  it('declares the language on the HTML part', () => {
+    expect(de.html).toContain('<html lang="de">');
+    expect(en.html).toContain('<html lang="en">');
+  });
+
+  it('keeps umlauts readable and does not double-escape them', () => {
+    const mail = stringsFor('de').mail;
+    const withUmlauts = Object.values(mail).filter((value) => /[äöüÄÖÜß]/.test(value));
+    expect(withUmlauts.length, 'no German mail string carries an umlaut — suspect').toBeGreaterThan(1);
+    for (const value of withUmlauts) {
+      // Only strings with no placeholder can be compared verbatim.
+      if (value.includes('{')) continue;
+      expect(de.text, `mangled in text: ${value}`).toContain(value);
+    }
+    expect(de.html).not.toContain('&Ouml;');
+    expect(de.html).not.toContain('&amp;amp;');
+  });
+
+  it('still escapes a hostile gateway name in the German HTML part', () => {
+    // The English case already covers this; German must not have opened a
+    // second, unescaped path to the same sink.
+    const hostile = buildInviteMessage({ ...BASE, language: 'de', gatewayName: '<script>alert(1)</script>' });
+    expect(hostile.html).not.toContain('<script>alert(1)</script>');
+    expect(hostile.html).toContain('&lt;script&gt;');
   });
 });

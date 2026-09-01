@@ -43,6 +43,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
+import { stringsFor, type GatewayLanguage } from '../i18n.js';
 
 /** The only endpoints the page talks to. All three already existed. */
 const MEMBERS_PATH = '/admin/members';
@@ -73,14 +74,40 @@ function contentSecurityPolicy(nonce: string): string {
  * is operator-supplied text, and the one place it is displayed must not be the
  * one place it is executed.
  */
-export function renderAdminUiPage(nonce: string): string {
+/**
+ * Escapes a dictionary string on its way into element text.
+ *
+ * Every string here is a compile-time literal we wrote, so this is not
+ * defending against an attacker — it is defending against a translator. German
+ * copy is the first place a `&` or a `<` shows up in what used to be plain
+ * ASCII, and an unescaped one produces a page that is subtly wrong only in the
+ * language the person who shipped it does not read.
+ */
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Serialises the dictionary for the inline `<script>`.
+ *
+ * `JSON.stringify` alone is not enough inside a script element: a literal
+ * `</script>` anywhere in a string would close the block early. `<` is escaped
+ * to its `\u003c` form, which JSON parses back to the same character, so the
+ * strings arrive intact and the document cannot be broken by one.
+ */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+export function renderAdminUiPage(nonce: string, language: GatewayLanguage): string {
+  const t = stringsFor(language).console;
   return `<!doctype html>
-<html lang="en">
+<html lang="${language}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Gateway admin</title>
+<title>${escapeHtml(t.title)}</title>
 <style nonce="${nonce}">
 :root { color-scheme: light dark; --line: #d6d8dd; --muted: #5b6068; --bad: #a4262c; --ok: #1f7a4d; }
 * { box-sizing: border-box; }
@@ -111,73 +138,72 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 </head>
 <body>
 <main>
-  <h1>Gateway admin</h1>
+  <h1>${escapeHtml(t.heading)}</h1>
   <p class="muted" id="mode-line" hidden></p>
 
   <section id="signin" class="card">
     <form class="row" id="signin-form">
       <div>
-        <label for="admin-token">Admin token</label>
+        <label for="admin-token">${escapeHtml(t.adminTokenLabel)}</label>
         <input id="admin-token" type="password" autocomplete="off" spellcheck="false" required>
       </div>
-      <button type="submit">Unlock</button>
+      <button type="submit">${escapeHtml(t.unlock)}</button>
     </form>
     <p class="error" id="signin-error" hidden></p>
-    <p class="muted">The token is kept in this page only, for as long as the tab is open.
-      It is not saved in your browser and not put in the address bar. Close the tab to sign out.</p>
+    <p class="muted">${escapeHtml(t.tokenNote)}</p>
   </section>
 
   <div id="console" hidden>
     <p class="error" id="console-error" hidden></p>
 
-    <h2>Members</h2>
+    <h2>${escapeHtml(t.membersHeading)}</h2>
     <table>
-      <thead><tr><th>ID</th><th>Daily limit</th><th>Created</th><th>Revoked</th><th></th></tr></thead>
+      <thead><tr><th>${escapeHtml(t.colId)}</th><th>${escapeHtml(t.colDailyLimit)}</th><th>${escapeHtml(t.colCreated)}</th><th>${escapeHtml(t.colRevoked)}</th><th></th></tr></thead>
       <tbody id="members-body"></tbody>
     </table>
-    <p class="muted" id="members-empty" hidden>No members yet. Invite somebody below.</p>
+    <p class="muted" id="members-empty" hidden>${escapeHtml(t.membersEmpty)}</p>
 
     <div class="card">
       <form class="row" id="member-form">
         <div>
-          <label for="member-id">New member ID</label>
+          <label for="member-id">${escapeHtml(t.newMemberIdLabel)}</label>
           <input id="member-id" required>
         </div>
         <div>
-          <label for="member-limit">Daily limit</label>
+          <label for="member-limit">${escapeHtml(t.colDailyLimit)}</label>
           <input id="member-limit" type="number" min="0" step="1" value="50" required>
         </div>
-        <button type="submit">Create member</button>
+        <button type="submit">${escapeHtml(t.createMember)}</button>
       </form>
       <div id="member-result" hidden></div>
     </div>
 
-    <h2>Invites</h2>
+    <h2>${escapeHtml(t.invitesHeading)}</h2>
     <table>
-      <thead><tr><th>Member ID</th><th>Daily limit</th><th>Status</th><th>Expires</th><th>Email</th><th></th></tr></thead>
+      <thead><tr><th>${escapeHtml(t.colMemberId)}</th><th>${escapeHtml(t.colDailyLimit)}</th><th>${escapeHtml(t.colStatus)}</th><th>${escapeHtml(t.colExpires)}</th><th>${escapeHtml(t.colEmail)}</th><th></th></tr></thead>
       <tbody id="invites-body"></tbody>
     </table>
-    <p class="muted" id="invites-empty" hidden>No invites yet.</p>
+    <p class="muted" id="invites-empty" hidden>${escapeHtml(t.invitesEmpty)}</p>
 
     <div class="card">
       <form class="row" id="invite-form">
         <div>
-          <label for="invite-member">Member ID</label>
+          <label for="invite-member">${escapeHtml(t.memberIdLabel)}</label>
           <input id="invite-member" required>
         </div>
         <div>
-          <label for="invite-limit">Daily limit</label>
+          <label for="invite-limit">${escapeHtml(t.colDailyLimit)}</label>
           <input id="invite-limit" type="number" min="0" step="1" value="50" required>
         </div>
         <div>
-          <label for="invite-email">Email (optional)</label>
+          <label for="invite-email">${escapeHtml(t.emailOptionalLabel)}</label>
           <input id="invite-email" type="email">
         </div>
         <div>
-          <label for="invite-ttl">Valid for, hours (optional)</label>
+          <label for="invite-ttl">${escapeHtml(t.ttlHoursLabel)}</label>
           <input id="invite-ttl" type="number" min="1" step="1">
         </div>
-        <button type="submit">Create invite</button>
+        <button type="submit">${escapeHtml(t.createInvite)}</button>
       </form>
       <div id="invite-result" hidden></div>
     </div>
@@ -186,6 +212,32 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 <script nonce="${nonce}">
 (function () {
   'use strict';
+
+  // The dictionary crosses as DATA, not as interpolated code: every string
+  // below is looked up on this object, so a translation can never become a
+  // syntax error or an injection point in the page it is rendered into.
+  var T = ${scriptJson(t)};
+  var LANG = ${scriptJson(language)};
+
+  /** Same {name} substitution as the server's fill(), for the same strings. */
+  function fill(template, values) {
+    return template.replace(/\\{(\\w+)\\}/g, function (match, name) {
+      return Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match;
+    });
+  }
+
+  /**
+   * The API returns InviteStatus as a raw enum value. An unknown one is shown
+   * as-is rather than blanked: a new status the console has not learned yet is
+   * still more useful on screen than nothing.
+   */
+  function statusLabel(status) {
+    if (status === 'pending') return T.statusPending;
+    if (status === 'redeemed') return T.statusRedeemed;
+    if (status === 'expired') return T.statusExpired;
+    if (status === 'revoked') return T.statusRevoked;
+    return status;
+  }
 
   var MEMBERS = ${JSON.stringify(MEMBERS_PATH)};
   var INVITES = ${JSON.stringify(INVITES_PATH)};
@@ -217,7 +269,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
   function messageOf(payload, status) {
     if (payload && payload.error && typeof payload.error.message === 'string') return payload.error.message;
-    return 'The gateway answered ' + status + '.';
+    return fill(T.gatewayAnswered, { status: status });
   }
 
   function request(method, path, body) {
@@ -240,15 +292,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
     if (!value) return '—';
     var parsed = new Date(value);
     if (isNaN(parsed.getTime())) return String(value);
-    return parsed.toLocaleString();
+    return parsed.toLocaleString(LANG);
   }
 
   function copyButton(value) {
-    var button = el('button', 'Copy');
+    var button = el('button', T.copy);
     button.type = 'button';
     button.addEventListener('click', function () {
-      var done = function () { button.textContent = 'Copied'; };
-      var failed = function () { button.textContent = 'Select and copy'; };
+      var done = function () { button.textContent = T.copied; };
+      var failed = function () { button.textContent = T.selectAndCopy; };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value).then(done, failed);
         return;
@@ -277,7 +329,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
   function reportError(error) {
     var node = byId('console-error');
-    show(node, error && error.message ? error.message : 'Something went wrong.');
+    show(node, error && error.message ? error.message : T.somethingWentWrong);
   }
 
   function clearError() { hide(byId('console-error')); }
@@ -285,7 +337,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   // ── Members ───────────────────────────────────────────────────────────────
 
   function revokeMember(id) {
-    if (!window.confirm('Revoke member "' + id + '"? Their token stops working immediately.')) return;
+    if (!window.confirm(fill(T.confirmRevokeMember, { id: id }))) return;
     clearError();
     request('DELETE', MEMBERS + '/' + encodeURIComponent(id))
       .then(loadMembers)
@@ -300,7 +352,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
     row.appendChild(el('td', member.revokedAt ? formatTime(member.revokedAt) : '—'));
     var actions = el('td');
     if (!member.revokedAt) {
-      actions.appendChild(actionButton('Revoke', function () { revokeMember(member.id); }));
+      actions.appendChild(actionButton(T.revoke, function () { revokeMember(member.id); }));
     }
     row.appendChild(actions);
     return row;
@@ -326,9 +378,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
       dailyLimit: Number(byId('member-limit').value)
     }).then(function (payload) {
       result.textContent = '';
-      result.appendChild(el('p', 'Member "' + payload.member.id + '" created.'));
-      result.appendChild(secretRow('Member token — shown once, and never again.', payload.token));
-      result.appendChild(el('p', 'Give it to them now. It is not stored and cannot be recovered.', 'muted'));
+      result.appendChild(el('p', fill(T.memberCreated, { id: payload.member.id })));
+      result.appendChild(secretRow(T.memberTokenLabel, payload.token));
+      result.appendChild(el('p', T.memberTokenNote, 'muted'));
       show(result);
       byId('member-form').reset();
       return loadMembers();
@@ -338,7 +390,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   // ── Invites ───────────────────────────────────────────────────────────────
 
   function revokeInvite(invite) {
-    if (!window.confirm('Revoke the invite for "' + invite.memberId + '"? The link stops working.')) return;
+    if (!window.confirm(fill(T.confirmRevokeInvite, { id: invite.memberId }))) return;
     clearError();
     request('DELETE', INVITES + '/' + encodeURIComponent(invite.id))
       .then(loadInvites)
@@ -349,12 +401,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
     var row = el('tr');
     row.appendChild(el('td', invite.memberId));
     row.appendChild(el('td', invite.dailyLimit));
-    row.appendChild(el('td', invite.status, 'status-' + invite.status));
+    row.appendChild(el('td', statusLabel(invite.status), 'status-' + invite.status));
     row.appendChild(el('td', formatTime(invite.expiresAt)));
     row.appendChild(el('td', invite.email || '—'));
     var actions = el('td');
     if (invite.status === 'pending') {
-      actions.appendChild(actionButton('Revoke', function () { revokeInvite(invite); }));
+      actions.appendChild(actionButton(T.revoke, function () { revokeInvite(invite); }));
     }
     row.appendChild(actions);
     return row;
@@ -389,14 +441,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
     hide(result);
     request('POST', INVITES, inviteBody()).then(function (payload) {
       result.textContent = '';
-      result.appendChild(el('p', 'Invite for "' + payload.memberId + '" created.'));
+      result.appendChild(el('p', fill(T.inviteCreated, { id: payload.memberId })));
       if (payload.link) {
-        result.appendChild(secretRow('Invite link — shown once. Send it to the person you are inviting.', payload.link));
+        result.appendChild(secretRow(T.inviteLinkLabel, payload.link));
       } else {
-        result.appendChild(el('p', 'No link could be built: this gateway has no public URLs configured. Send the token below instead.', 'muted'));
+        result.appendChild(el('p', T.inviteNoLink, 'muted'));
       }
-      result.appendChild(secretRow('Invite token — shown once, and never again.', payload.token));
-      result.appendChild(el('p', payload.emailed ? 'An email was also sent.' : 'No email was sent — share the link yourself.', 'muted'));
+      result.appendChild(secretRow(T.inviteTokenLabel, payload.token));
+      result.appendChild(el('p', payload.emailed ? T.inviteEmailSent : T.inviteEmailNotSent, 'muted'));
       show(result);
       byId('invite-form').reset();
       return loadInvites();
@@ -420,8 +472,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
     }).catch(function (error) {
       adminToken = null;
       show(errorNode, error && error.status === 401
-        ? 'That token was not accepted. Check it and try again.'
-        : (error && error.message) || 'The gateway could not be reached.');
+        ? T.tokenRejected
+        : (error && error.message) || T.gatewayUnreachable);
     });
   }
 
@@ -430,7 +482,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
       return response.ok ? response.json() : null;
     }).then(function (info) {
       if (!info || !info.auditEnabled) return;
-      show(byId('mode-line'), 'Organization mode — audit active. Requests and images are recorded.');
+      show(byId('mode-line'), T.auditModeLine);
     }).catch(function () { /* The page works without it. */ });
   }
 
@@ -453,7 +505,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
  * and disappears with the API it drives, and `/admin/ui` on an unconfigured
  * gateway reaches the same 404 as `/admin/members`.
  */
-export function createAdminUiRoutes(): Router {
+export function createAdminUiRoutes(language: GatewayLanguage): Router {
   const router = Router();
 
   router.get('/ui', (_req: Request, res: Response) => {
@@ -469,7 +521,7 @@ export function createAdminUiRoutes(): Router {
     // The document is public but personal to the operator's session; a shared
     // cache holding it buys nothing and a stale one confuses.
     res.setHeader('Cache-Control', 'no-store');
-    res.send(renderAdminUiPage(nonce));
+    res.send(renderAdminUiPage(nonce, language));
   });
 
   return router;

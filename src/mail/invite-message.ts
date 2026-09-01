@@ -20,6 +20,8 @@
  * the full URL as readable text.
  */
 
+import { fill, stringsFor, type GatewayLanguage } from '../i18n.js';
+
 export interface InviteMessageInput {
   /** Human-facing name of the gateway, from `GATEWAY_NAME`. */
   gatewayName: string;
@@ -32,6 +34,15 @@ export interface InviteMessageInput {
   /** Requests per UTC day the invite will grant. */
   dailyLimit: number;
   expiresAt: string;
+  /**
+   * The gateway's configured language (`GATEWAY_LANGUAGE`).
+   *
+   * An INPUT, not a module-scope read, for the same reason everything else
+   * here is: this builder stays a pure function of its arguments, so both
+   * languages are asserted by string comparison with no environment and no
+   * SMTP anywhere near the test.
+   */
+  language: GatewayLanguage;
 }
 
 export interface InviteMessage {
@@ -90,6 +101,7 @@ function formatExpiry(expiresAt: string): string {
 }
 
 export function buildInviteMessage(input: InviteMessageInput): InviteMessage {
+  const t = stringsFor(input.language).mail;
   const link = buildInviteLink({
     clientBaseUrl: input.clientBaseUrl,
     gatewayPublicUrl: input.gatewayPublicUrl,
@@ -97,44 +109,47 @@ export function buildInviteMessage(input: InviteMessageInput): InviteMessage {
   });
   const expiry = formatExpiry(input.expiresAt);
 
+  // Built once and used by both parts, so the two can never disagree about
+  // what the reader was told.
+  const invitedTo = fill(t.invitedTo, { gateway: input.gatewayName });
+  const allowance = fill(t.allowance, { limit: input.dailyLimit });
+  const expires = fill(t.expires, { expiry });
+
   const text = [
-    `You have been invited to use ${input.gatewayName}.`,
+    invitedTo,
     '',
-    'It lets you use openplate without setting up your own AI provider key —',
-    'the person who invited you pays for the requests.',
+    t.whatItIs,
     '',
-    'Open this link to connect:',
+    t.openLink,
     '',
     link,
     '',
-    `Your allowance: ${input.dailyLimit} requests per day.`,
-    `This invite expires: ${expiry}. It can be used once.`,
+    allowance,
+    expires,
     '',
-    'Your food diary stays on your own device. Only the photo you send for an',
-    'estimate passes through the gateway, and no request is ever logged.',
+    t.privacy,
     '',
-    'If you were not expecting this, ignore it — nothing happens until the link',
-    'is opened.',
+    t.unexpected,
   ].join('\n');
 
   const html = [
     '<!doctype html>',
-    '<html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111">',
-    `<p>You have been invited to use <strong>${escapeHtml(input.gatewayName)}</strong>.</p>`,
-    '<p>It lets you use openplate without setting up your own AI provider key — the person who invited you pays for the requests.</p>',
-    `<p><a href="${escapeHtml(link)}">Open this link to connect</a></p>`,
+    '<html lang="' + input.language + '"><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111">',
+    `<p>${escapeHtml(invitedTo)}</p>`,
+    `<p>${escapeHtml(t.whatItIs)}</p>`,
+    `<p><a href="${escapeHtml(link)}">${escapeHtml(t.openLinkHtml)}</a></p>`,
     // The URL as readable text too: a bare "click here" whose target is
     // invisible is exactly what a phishing mail looks like.
     `<p style="word-break:break-all;font-size:12px;color:#555">${escapeHtml(link)}</p>`,
-    `<p>Your allowance: <strong>${input.dailyLimit}</strong> requests per day.<br>`,
-    `This invite expires: <strong>${escapeHtml(expiry)}</strong>. It can be used once.</p>`,
-    '<p style="font-size:12px;color:#555">Your food diary stays on your own device. Only the photo you send for an estimate passes through the gateway, and no request is ever logged.</p>',
-    '<p style="font-size:12px;color:#555">If you were not expecting this, ignore it — nothing happens until the link is opened.</p>',
+    `<p>${escapeHtml(allowance)}<br>`,
+    `${escapeHtml(expires)}</p>`,
+    `<p style="font-size:12px;color:#555">${escapeHtml(t.privacy)}</p>`,
+    `<p style="font-size:12px;color:#555">${escapeHtml(t.unexpected)}</p>`,
     '</body></html>',
   ].join('\n');
 
   return {
-    subject: `You have been invited to ${input.gatewayName}`,
+    subject: fill(t.subject, { gateway: input.gatewayName }),
     text,
     html,
     link,
