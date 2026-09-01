@@ -65,7 +65,7 @@ const ENGLISH = {
   console: {
     title: 'Gateway admin',
     heading: 'Gateway admin',
-    auditModeLine: 'Organization mode — audit active. Requests and images are recorded.',
+    auditModeLine: 'Organization mode: audit active. Requests and images are recorded.',
 
     adminTokenLabel: 'Admin token',
     unlock: 'Unlock',
@@ -79,7 +79,7 @@ const ENGLISH = {
     newMemberIdLabel: 'New member ID',
     createMember: 'Create member',
     memberCreated: 'Member "{id}" created.',
-    memberTokenLabel: 'Member token — shown once, and never again.',
+    memberTokenLabel: 'Member token, shown once, and never again.',
     memberTokenNote: 'Give it to them now. It is not stored and cannot be recovered.',
     confirmRevokeMember: 'Revoke member "{id}"? Their token stops working immediately.',
 
@@ -90,12 +90,12 @@ const ENGLISH = {
     ttlHoursLabel: 'Valid for, hours (optional)',
     createInvite: 'Create invite',
     inviteCreated: 'Invite for "{id}" created.',
-    inviteLinkLabel: 'Invite link — shown once. Send it to the person you are inviting.',
+    inviteLinkLabel: 'Invite link, shown once. Send it to the person you are inviting.',
     inviteNoLink:
       'No link could be built: this gateway has no public URLs configured. Send the token below instead.',
-    inviteTokenLabel: 'Invite token — shown once, and never again.',
+    inviteTokenLabel: 'Invite token, shown once, and never again.',
     inviteEmailSent: 'An email was also sent.',
-    inviteEmailNotSent: 'No email was sent — share the link yourself.',
+    inviteEmailNotSent: 'No email was sent. Share the link yourself.',
     confirmRevokeInvite: 'Revoke the invite for "{id}"? The link stops working.',
 
     colId: 'ID',
@@ -127,14 +127,14 @@ const ENGLISH = {
     subject: 'You have been invited to {gateway}',
     invitedTo: 'You have been invited to use {gateway}.',
     whatItIs:
-      'It lets you use openplate without setting up your own AI provider key — the person who invited you pays for the requests.',
+      'It lets you use openplate without setting up your own AI provider key. The person who invited you pays for the requests.',
     openLink: 'Open this link to connect:',
     openLinkHtml: 'Open this link to connect',
     allowance: 'Your allowance: {limit} requests per day.',
     expires: 'This invite expires: {expiry}. It can be used once.',
     privacy:
       'Your food diary stays on your own device. Only the photo you send for an estimate passes through the gateway, and no request is ever logged.',
-    unexpected: 'If you were not expecting this, ignore it — nothing happens until the link is opened.',
+    unexpected: 'If you were not expecting this, ignore it. Nothing happens until the link is opened.',
   },
 } as const;
 
@@ -148,7 +148,7 @@ const GERMAN: GatewayStrings = {
   console: {
     title: 'Gateway-Admin',
     heading: 'Gateway-Admin',
-    auditModeLine: 'Organisationsmodus – Protokollierung aktiv. Anfragen und Bilder werden aufgezeichnet.',
+    auditModeLine: 'Organisationsmodus: Audit aktiv. Anfragen und Bilder werden aufgezeichnet.',
     adminTokenLabel: 'Admin-Token',
     unlock: 'Entsperren',
     tokenNote:
@@ -160,7 +160,7 @@ const GERMAN: GatewayStrings = {
     newMemberIdLabel: 'Neue Mitglieds-ID',
     createMember: 'Mitglied anlegen',
     memberCreated: 'Mitglied „{id}“ wurde angelegt.',
-    memberTokenLabel: 'Mitglieder-Token – wird nur dieses eine Mal angezeigt.',
+    memberTokenLabel: 'Mitglieds-Token, wird nur einmal angezeigt und danach nie wieder.',
     memberTokenNote:
       'Geben Sie es der Person jetzt. Es wird nicht gespeichert und kann nicht wiederhergestellt werden.',
     confirmRevokeMember: 'Mitglied „{id}“ widerrufen? Das Token verliert sofort seine Gültigkeit.',
@@ -171,12 +171,12 @@ const GERMAN: GatewayStrings = {
     ttlHoursLabel: 'Gültig für, Stunden (optional)',
     createInvite: 'Einladung erstellen',
     inviteCreated: 'Einladung für „{id}“ wurde erstellt.',
-    inviteLinkLabel: 'Einladungslink – wird nur einmal angezeigt. Senden Sie ihn an die eingeladene Person.',
+    inviteLinkLabel: 'Einladungslink, wird nur einmal angezeigt. Senden Sie ihn an die Person, die Sie einladen möchten.',
     inviteNoLink:
       'Es konnte kein Link erstellt werden: Für dieses Gateway sind keine öffentlichen URLs eingerichtet. Senden Sie stattdessen das Token unten.',
-    inviteTokenLabel: 'Einladungs-Token – wird nur dieses eine Mal angezeigt.',
+    inviteTokenLabel: 'Einladungs-Token, wird nur einmal angezeigt und danach nie wieder.',
     inviteEmailSent: 'Eine E-Mail wurde ebenfalls gesendet.',
-    inviteEmailNotSent: 'Es wurde keine E-Mail gesendet – teilen Sie den Link selbst.',
+    inviteEmailNotSent: 'Es wurde keine E-Mail gesendet. Teilen Sie den Link selbst.',
     confirmRevokeInvite: 'Einladung für „{id}“ widerrufen? Der Link verliert seine Gültigkeit.',
     colId: 'ID',
     colDailyLimit: 'Tageslimit',
@@ -202,7 +202,7 @@ const GERMAN: GatewayStrings = {
     subject: 'Sie wurden zu {gateway} eingeladen',
     invitedTo: 'Sie wurden eingeladen, {gateway} zu nutzen.',
     whatItIs:
-      'Damit können Sie openplate nutzen, ohne einen eigenen KI-Anbieterschlüssel einzurichten – die Person, die Sie eingeladen hat, übernimmt die Kosten für die Anfragen.',
+      'Damit können Sie openplate nutzen, ohne einen eigenen KI-Anbieterschlüssel einzurichten. Die Person, die Sie eingeladen hat, bezahlt die Anfragen.',
     openLink: 'Öffnen Sie diesen Link, um sich zu verbinden:',
     openLinkHtml: 'Öffnen Sie diesen Link, um sich zu verbinden',
     allowance: 'Ihr Kontingent: {limit} Anfragen pro Tag.',
@@ -210,7 +210,7 @@ const GERMAN: GatewayStrings = {
     privacy:
       'Ihr Ernährungstagebuch bleibt auf Ihrem eigenen Gerät. Nur das Foto, das Sie für eine Schätzung senden, wird über das Gateway geleitet, und es wird keinerlei Anfrage protokolliert.',
     unexpected:
-      'Wenn Sie diese Einladung nicht erwartet haben, können Sie sie einfach ignorieren – es passiert nichts, solange der Link nicht geöffnet wird.',
+      'Falls Sie dies nicht erwartet haben, ignorieren Sie es bitte. Es geschieht nichts, solange der Link nicht geöffnet wird.',
   },
 };
 
