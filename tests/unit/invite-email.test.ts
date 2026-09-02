@@ -29,24 +29,24 @@ const BASE = {
 } satisfies InviteMessageInput;
 
 describe('buildInviteLink', () => {
-  it('builds the connect URL the client expects', () => {
+  it('builds the join fragment the client expects', () => {
     const link = buildInviteLink(BASE);
 
     expect(link).toBe(
-      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=gi_abc123',
+      'https://app.example.test/join#gateway=https%3A%2F%2Fgateway.example.test&ginvite=gi_abc123',
     );
   });
 
-  it('encodes the gateway URL, so its own ? and & cannot truncate the query', () => {
+  it('encodes the gateway URL, so its own ? and & cannot truncate the fragment', () => {
     // An unencoded gateway URL carrying a query string would silently swallow
-    // the `invite` parameter, and the link would fail with no clue why.
+    // the `ginvite` parameter, and the link would fail with no clue why.
     const link = buildInviteLink({
       ...BASE,
       gatewayPublicUrl: 'https://gateway.example.test/base?x=1&y=2',
     });
 
     expect(link).toContain('gateway=https%3A%2F%2Fgateway.example.test%2Fbase%3Fx%3D1%26y%3D2');
-    expect(link).toContain('&invite=gi_abc123');
+    expect(link).toContain('&ginvite=gi_abc123');
   });
 
   it('encodes the token too, rather than relying on base64url being query-safe', () => {
@@ -54,7 +54,7 @@ describe('buildInviteLink', () => {
     // link breaks at once.
     const link = buildInviteLink({ ...BASE, inviteToken: 'gi_a+b/c=d&e' });
 
-    expect(link).toContain('invite=gi_a%2Bb%2Fc%3Dd%26e');
+    expect(link).toContain('ginvite=gi_a%2Bb%2Fc%3Dd%26e');
   });
 
   it('never doubles a slash, whatever the operator put in the base URLs', () => {
@@ -65,7 +65,7 @@ describe('buildInviteLink', () => {
     });
 
     expect(link).toBe(
-      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=gi_abc123',
+      'https://app.example.test/join#gateway=https%3A%2F%2Fgateway.example.test&ginvite=gi_abc123',
     );
   });
 });
@@ -90,8 +90,8 @@ describe('buildInviteMessage', () => {
     const message = buildInviteMessage(BASE);
 
     const withoutHrefs = message.html.replace(/href="[^"]*"/g, '');
-    expect(withoutHrefs).toContain('https://app.example.test/connect-gateway');
-    expect(withoutHrefs).toContain('invite=gi_abc123');
+    expect(withoutHrefs).toContain('https://app.example.test/join');
+    expect(withoutHrefs).toContain('ginvite=gi_abc123');
   });
 
   it('names the gateway, the allowance and the expiry', () => {

@@ -188,7 +188,7 @@ describe('an error response that quotes the request back', () => {
       const printed = `${result.out}\n${result.err}`;
       expect(printed).not.toContain(LEAKED_RECIPIENT);
       expect(printed).not.toContain(LEAKED_INVITE_LINK);
-      expect(printed).not.toContain('connect-gateway');
+      expect(printed).not.toContain('/join#');
       expect(printed).not.toContain('inv_tok_must_never_print');
       // And it is still actionable: the status and the call we made.
       expect(result.err).toContain(String(status));

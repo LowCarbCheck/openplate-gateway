@@ -164,8 +164,10 @@ endpoint" to everybody, exactly like the rest of this gateway's opt-in surfaces.
 way to use it is the bundled admin page at `/admin/ui`: sign in with the token, list members
 and invites, create an invite, and copy the link. Everything it does is also a plain `curl`
 call, for scripting. See [docs/family-setup.md](docs/family-setup.md) for the full walk-through,
-including the openplate side: an invite link opens `/connect-gateway` in the client and the
-member is connected with nothing to paste.
+including the openplate side: an invite link opens `/join` in the client and the
+member is connected with nothing to paste. (The link's token rides in the URL fragment, never
+the query string, so it cannot land in a server access log; `/connect-gateway` still resolves
+for old links and redirects into `/join`.)
 
 ### `gw-api` — the admin API from a terminal
 
@@ -217,7 +219,7 @@ known limitations.
 | `POST` | `/v1/chat/completions` | member token | The proxy. Streaming is passed through. |
 | `GET` | `/healthcheck` | none | Liveness. |
 | `GET` | `/v1/gateway/info` | none | Gateway identity (name, model, version) and `auditEnabled` — read by a client before it has a token to authenticate with. |
-| `POST` | `/v1/invites/redeem` | none | Turns a one-shot invite token into a member token. What an invite link's `/connect-gateway` step calls. |
+| `POST` | `/v1/invites/redeem` | none | Turns a one-shot invite token into a member token. What an invite link's `/join` step calls. |
 | `GET` | `/admin/ui` | admin token | The bundled admin page — members, invites, links. `pnpm gw-api` is the terminal equivalent. |
 | `*` | `/admin/*` | admin token | The admin API `/admin/ui` is built on. 404 if `GATEWAY_ADMIN_TOKEN` is unset. See docs/family-setup.md. |
 | `*` | `/admin/audit*` | admin token, org mode | The audit trail. Gated on top of the admin token by `ORG_MODE=true` — 404 on a family gateway even with a valid admin token, same as any unknown path. See docs/org-mode.md. |

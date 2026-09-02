@@ -46,7 +46,7 @@ export interface FakeGateway {
 /** What the `leak` scenario quotes back. Neither may ever appear in CLI output. */
 export const LEAKED_RECIPIENT = 'robin@example.test';
 export const LEAKED_INVITE_LINK =
-  'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgw.example.test&invite=inv_tok_must_never_print';
+  'https://app.example.test/join#gateway=https%3A%2F%2Fgw.example.test&ginvite=inv_tok_must_never_print';
 
 function parseJson(raw: string): unknown {
   if (raw === '') return undefined;

@@ -107,7 +107,7 @@ describe('an HTTP-configured gateway whose mail API is failing', () => {
 
     expect(invite.emailed).toBe(false);
     expect(invite.link).toBe(
-      `${CLIENT_BASE_URL}/connect-gateway?gateway=${encodeURIComponent(GATEWAY_PUBLIC_URL)}&invite=${encodeURIComponent(invite.token)}`,
+      `${CLIENT_BASE_URL}/join#gateway=${encodeURIComponent(GATEWAY_PUBLIC_URL)}&ginvite=${encodeURIComponent(invite.token)}`,
     );
   });
 
@@ -122,7 +122,7 @@ describe('an HTTP-configured gateway whose mail API is failing', () => {
     expect(logged).not.toContain(RECIPIENT);
     expect(logged).not.toContain(invite.token);
     expect(logged).not.toContain(invite.link);
-    expect(logged).not.toContain('/connect-gateway');
+    expect(logged).not.toContain('/join#');
     expect(logged).not.toContain('invited');
     expect(logged).not.toContain(MAIL_API_KEY);
   });

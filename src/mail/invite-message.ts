@@ -61,6 +61,15 @@ function stripTrailingSlashes(value: string): string {
 /**
  * The link the client opens.
  *
+ * THE FRAGMENT, NEVER THE QUERY STRING. The token is a live capability, same as
+ * a sync invite (see `openplate/app/lib/join-link.ts`, whose grammar this
+ * mirrors, and `djinn/openplate/join-link.ts`, the operator-side builder this
+ * one keeps in step with). A query string carries it into the browser's
+ * history, into the `Referer` of the next request, and into the access log of
+ * every server the link passes on its way to the person invited. A fragment is
+ * never sent to any server at all — which is the whole reason to route through
+ * `/join#gateway=...&ginvite=gi_...` rather than `/connect-gateway?...`.
+ *
  * BOTH VALUES ARE ENCODED. The gateway URL obviously — it is a URL inside a
  * query string, and an unencoded `?` or `&` in it would silently truncate
  * everything after. The token less obviously: it is base64url, whose alphabet
@@ -75,7 +84,7 @@ export function buildInviteLink(parts: {
   const client = stripTrailingSlashes(parts.clientBaseUrl);
   const gateway = encodeURIComponent(stripTrailingSlashes(parts.gatewayPublicUrl));
   const invite = encodeURIComponent(parts.inviteToken);
-  return `${client}/connect-gateway?gateway=${gateway}&invite=${invite}`;
+  return `${client}/join#gateway=${gateway}&ginvite=${invite}`;
 }
 
 /**

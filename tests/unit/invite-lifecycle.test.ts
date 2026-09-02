@@ -101,7 +101,7 @@ describe('creating an invite', () => {
 
     expect(invite.token).toContain('gi_');
     expect(invite.link).toBe(
-      `${CLIENT_BASE_URL}/connect-gateway?gateway=${encodeURIComponent(GATEWAY_PUBLIC_URL)}&invite=${encodeURIComponent(invite.token)}`,
+      `${CLIENT_BASE_URL}/join#gateway=${encodeURIComponent(GATEWAY_PUBLIC_URL)}&ginvite=${encodeURIComponent(invite.token)}`,
     );
     expect(invite.emailed).toBe(false);
   });

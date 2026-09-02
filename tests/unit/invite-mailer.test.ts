@@ -80,7 +80,7 @@ describe('with SMTP configured', () => {
     const response = await createInvite(started, { email: 'robin@example.test' });
 
     const body = response.body as { link: string; token: string };
-    expect(body.link).toContain('/connect-gateway?gateway=');
+    expect(body.link).toContain('/join#gateway=');
     expect(body.token).toContain('gi_');
   });
 
@@ -120,7 +120,7 @@ describe('with SMTP configured', () => {
     const logged = started.logLines.map((line) => JSON.stringify(line)).join('\n');
     expect(logged).not.toContain('robin@example.test');
     expect(logged).not.toContain(token);
-    expect(logged).not.toContain('/connect-gateway');
+    expect(logged).not.toContain('/join#');
     expect(logged).not.toContain(SMTP.pass);
   });
 
