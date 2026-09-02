@@ -11,4 +11,4 @@
  * test at the same moment you bump the version, not a client being told the
  * wrong number for a release cycle.
  */
-export const SERVICE_VERSION = '0.1.0';
+export const SERVICE_VERSION = '0.2.1';

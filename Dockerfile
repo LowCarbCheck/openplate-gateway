@@ -77,12 +77,20 @@ ENV PORT=3602 \
     LOG_LEVEL=info \
     NODE_ENV=production
 
+# A named volume, on its FIRST mount, copies the ownership of the image
+# directory it replaces. /app/state does not exist yet at this point in the
+# image, so without this step it is created root:root 0755 by the COPY/RUN
+# layers above — and the container, which runs as `node` below, can never
+# write member-store.json, invite-store.json or quota-store.json into it.
+# Boots healthy, then fails on the very first invite.
+RUN mkdir -p /app/state && chown node:node /app/state
+
 VOLUME /app/state
 
 EXPOSE 3602
 
 # Runs unprivileged. The node image ships a `node` user; /app/state must be
-# writable by it, which the compose example handles.
+# writable by it, which the chown above (and the compose example) handles.
 USER node
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
