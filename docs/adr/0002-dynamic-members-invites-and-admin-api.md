@@ -108,8 +108,11 @@ together, which is the unfairness the per-member limiter exists to avoid.
 ### Invites are one-shot, and every failure looks identical
 
 An invite is a short-lived, single-use credential that becomes a member. It carries the
-`opgwi_` prefix so a string found in a log or a chat is identifiable at a glance, and so
-pasting one into the wrong field fails cleanly.
+`gi_` prefix (`opgwi_` until M181/05) so a string found in a log or a chat is identifiable
+at a glance, and so pasting one into the wrong field fails cleanly. The prefix is also a
+service binding: `openplate-sync` signup invites wear `si_`, and `redeem` refuses anything
+without `gi_` as a shape gate BEFORE the lookup, answering the same 400 as an unknown token
+so the gate adds no oracle.
 
 `POST /v1/invites/redeem` answers **400 with a byte-identical body** for unknown, expired,
 already-redeemed and revoked alike — and for a malformed body, which would otherwise be a

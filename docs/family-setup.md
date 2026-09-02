@@ -161,7 +161,7 @@ You get back a **link**. Send it to that person however you like:
 {
   "id": "9f2c1b7a4e8d0361",
   "expiresAt": "2026-08-26T14:00:00.000Z",
-  "link": "https://app.openplate.example/connect-gateway?gateway=...&invite=opgwi_...",
+  "link": "https://app.openplate.example/connect-gateway?gateway=...&invite=gi_...",
   "emailed": false
 }
 ```

@@ -36,8 +36,32 @@ import { createAtomicJsonFile, type AtomicJsonFile } from './store/atomic-json-f
  * Distinct from a member token's shape so a human pasting the wrong one into
  * the wrong field gets a clean failure instead of a confusing 401, and so a
  * string found in a log or a chat is identifiable at a glance.
+ *
+ * `gi_` since M181/05, where the prefix stopped being a convenience and became
+ * a BINDING. A join link can carry this token beside an `openplate-sync` signup
+ * invite, which wears `si_`; the two are otherwise interchangeable strings, and
+ * the services behind them have different operators and different revocation
+ * surfaces. Short on purpose: it is read aloud, retyped and pasted by people.
+ * It replaced `opgwi_` outright rather than being accepted alongside it,
+ * because an invite lives at most a week (`MAX_INVITE_TTL_HOURS`) and this is
+ * pre-launch: the whole outstanding population expires on its own.
  */
-export const INVITE_TOKEN_PREFIX = 'opgwi_';
+export const INVITE_TOKEN_PREFIX = 'gi_';
+
+/**
+ * Whether a presented string could be an invite of THIS service at all.
+ *
+ * A SHAPE GATE, and `redeem` runs it before it touches the store. It is not a
+ * check on the token's validity and must never behave like one: its rejection
+ * is the same `InviteRejectedError('unknown')` an invented token gets, which
+ * `public-routes.ts` turns into the same 400 with the same body as an expired,
+ * revoked or already-spent one. So it buys a refusal without a lookup, and
+ * gives up nothing: the digest comparison below stays free of the length and
+ * prefix oracles it was written to avoid.
+ */
+export function hasInviteTokenShape(token: string): boolean {
+  return token.startsWith(INVITE_TOKEN_PREFIX);
+}
 
 /** 32 bytes = 256 bits, from a CSPRNG. Guessing is removed from the threat model. */
 const INVITE_TOKEN_BYTES = 32;
@@ -227,6 +251,11 @@ export function createFileInviteStore(
     },
 
     redeem(token: string): Promise<InviteRecord> {
+      // The shape gate, BEFORE the lookup and before the lock: a token minted
+      // by openplate-sync (`si_`) is refused here without being compared
+      // against a single stored digest — and is refused as `unknown`, which is
+      // exactly what an invented token gets. See `hasInviteTokenShape`.
+      if (!hasInviteTokenShape(token)) return Promise.reject(new InviteRejectedError('unknown'));
       const presentedDigest = Buffer.from(inviteTokenDigest(token), 'hex');
       const at = now();
       return file.update((current) => {

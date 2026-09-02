@@ -99,7 +99,7 @@ describe('creating an invite', () => {
 
     const invite = await createInvite(started);
 
-    expect(invite.token).toContain('opgwi_');
+    expect(invite.token).toContain('gi_');
     expect(invite.link).toBe(
       `${CLIENT_BASE_URL}/connect-gateway?gateway=${encodeURIComponent(GATEWAY_PUBLIC_URL)}&invite=${encodeURIComponent(invite.token)}`,
     );
@@ -158,7 +158,7 @@ describe('every rejected redemption produces the same answer', () => {
     const { app: started } = harness();
 
     // Unknown: a well-formed token nobody ever issued.
-    const unknown = await redeem(started, 'opgwi_this_token_was_never_issued_anywhere');
+    const unknown = await redeem(started, 'gi_this_token_was_never_issued_anywhere');
 
     // Redeemed: created, used, then used again.
     const used = await createInvite(started, { memberId: 'used-one' });
@@ -189,10 +189,39 @@ describe('every rejected redemption produces the same answer', () => {
     }
   });
 
+  it('refuses a sync invite indistinguishably from an unknown one, so the shape gate is no oracle', async () => {
+    // `si_` is an openplate-sync SIGNUP invite. It must never be looked up
+    // here: the two services have different operators and different revocation
+    // surfaces, and a gateway that accepts the other one's token shape is a
+    // gateway whose invite endpoint can be probed with it.
+    //
+    // The gate runs BEFORE the digest comparison, so this case never touches
+    // the store — and the whole point of the assertion below is that a caller
+    // cannot tell. The response must be the same status, the same body and the
+    // same headers as a token nobody ever issued, and as an expired one.
+    const { app: started } = harness();
+
+    const unknown = await redeem(started, 'gi_this_token_was_never_issued_anywhere');
+    const lapsed = await createInvite(started, { memberId: 'lapsed-beside-a-sync-token', ttlHours: 1 });
+    await expireInvite(started, lapsed.id);
+    const expired = await redeem(started, lapsed.token);
+
+    const crossService = await redeem(started, 'si_a_sync_signup_invite_posted_to_the_gateway');
+
+    expect(crossService.status).toBe(400);
+    expect(crossService.text).toBe(unknown.text);
+    expect(crossService.text).toBe(expired.text);
+    expect(crossService.headers.get('retry-after')).toBeNull();
+    // And it is not echoed anywhere, in the response or in the log.
+    const logged = started.logLines.map((line) => JSON.stringify(line)).join('\n');
+    expect(crossService.text).not.toContain('si_a_sync_signup_invite_posted_to_the_gateway');
+    expect(logged).not.toContain('si_a_sync_signup_invite_posted_to_the_gateway');
+  });
+
   it('answers the same way to a malformed body, so the field shape is not a hint either', async () => {
     const { app: started } = harness();
 
-    const unknown = await redeem(started, 'opgwi_this_token_was_never_issued_anywhere');
+    const unknown = await redeem(started, 'gi_this_token_was_never_issued_anywhere');
     const malformed = await started.post('/v1/invites/redeem', { nope: 1 }, { token: null });
 
     expect(malformed.status).toBe(400);
@@ -201,7 +230,7 @@ describe('every rejected redemption produces the same answer', () => {
 
   it('never echoes the presented invite token back', async () => {
     const { app: started } = harness();
-    const guess = 'opgwi_secret_guess_value_not_a_real_invite';
+    const guess = 'gi_secret_guess_value_not_a_real_invite';
 
     const response = await redeem(started, guess);
 
@@ -227,7 +256,7 @@ describe('every rejected redemption produces the same answer', () => {
     const { app: started } = harness();
     const before = (await started.members.all()).length;
 
-    await redeem(started, 'opgwi_this_token_was_never_issued_anywhere');
+    await redeem(started, 'gi_this_token_was_never_issued_anywhere');
 
     expect(await started.members.all()).toHaveLength(before);
   });

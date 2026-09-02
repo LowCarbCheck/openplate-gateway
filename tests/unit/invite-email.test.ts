@@ -22,7 +22,7 @@ const BASE = {
   gatewayName: 'The Family Gateway',
   gatewayPublicUrl: 'https://gateway.example.test',
   clientBaseUrl: 'https://app.example.test',
-  inviteToken: 'opgwi_abc123',
+  inviteToken: 'gi_abc123',
   dailyLimit: 25,
   expiresAt: '2026-09-01T12:00:00.000Z',
   language: 'en',
@@ -33,7 +33,7 @@ describe('buildInviteLink', () => {
     const link = buildInviteLink(BASE);
 
     expect(link).toBe(
-      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=opgwi_abc123',
+      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=gi_abc123',
     );
   });
 
@@ -46,15 +46,15 @@ describe('buildInviteLink', () => {
     });
 
     expect(link).toContain('gateway=https%3A%2F%2Fgateway.example.test%2Fbase%3Fx%3D1%26y%3D2');
-    expect(link).toContain('&invite=opgwi_abc123');
+    expect(link).toContain('&invite=gi_abc123');
   });
 
   it('encodes the token too, rather than relying on base64url being query-safe', () => {
     // It is today. Relying on that means the day the token format changes, every
     // link breaks at once.
-    const link = buildInviteLink({ ...BASE, inviteToken: 'opgwi_a+b/c=d&e' });
+    const link = buildInviteLink({ ...BASE, inviteToken: 'gi_a+b/c=d&e' });
 
-    expect(link).toContain('invite=opgwi_a%2Bb%2Fc%3Dd%26e');
+    expect(link).toContain('invite=gi_a%2Bb%2Fc%3Dd%26e');
   });
 
   it('never doubles a slash, whatever the operator put in the base URLs', () => {
@@ -65,7 +65,7 @@ describe('buildInviteLink', () => {
     });
 
     expect(link).toBe(
-      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=opgwi_abc123',
+      'https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=gi_abc123',
     );
   });
 });
@@ -91,7 +91,7 @@ describe('buildInviteMessage', () => {
 
     const withoutHrefs = message.html.replace(/href="[^"]*"/g, '');
     expect(withoutHrefs).toContain('https://app.example.test/connect-gateway');
-    expect(withoutHrefs).toContain('invite=opgwi_abc123');
+    expect(withoutHrefs).toContain('invite=gi_abc123');
   });
 
   it('names the gateway, the allowance and the expiry', () => {

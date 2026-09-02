@@ -81,7 +81,7 @@ describe('with SMTP configured', () => {
 
     const body = response.body as { link: string; token: string };
     expect(body.link).toContain('/connect-gateway?gateway=');
-    expect(body.token).toContain('opgwi_');
+    expect(body.token).toContain('gi_');
   });
 
   it('sends nothing when no address was given', async () => {
@@ -147,6 +147,6 @@ describe('without the link URLs configured', () => {
     expect(response.status).toBe(201);
     const body = response.body as { link: string | null; token: string };
     expect(body.link).toBeNull();
-    expect(body.token).toContain('opgwi_');
+    expect(body.token).toContain('gi_');
   });
 });

@@ -14,8 +14,11 @@
  *
  * NO PREFIX, DELIBERATELY. The format predates ADR-0002 and every member's
  * existing token has this shape; prefixing new ones would split the population
- * for no benefit. Invite tokens DO carry `opgwi_` (see `invite-store.ts`) —
- * those are new, short-lived, and worth being able to recognise on sight.
+ * for no benefit. Invite tokens DO carry `gi_` (see `invite-store.ts`) —
+ * those are short-lived, they are handed to a person, and since M181/05 the
+ * prefix BINDS them to this service so one cannot be posted to openplate-sync.
+ * A member token is never handed to a person and never travels beside another
+ * service's token, so none of that applies to it.
  */
 import { createHash, randomBytes } from 'node:crypto';
 

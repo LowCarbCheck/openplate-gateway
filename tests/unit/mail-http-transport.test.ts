@@ -25,7 +25,7 @@ const API_KEY = 'a-mail-api-key-that-must-never-leak';
 const FROM = 'gateway@example.test';
 const RECIPIENT = 'robin@example.test';
 const SUBJECT = 'You have been invited to The Family Gateway';
-const INVITE_TOKEN = 'opgwi_a_credential_that_must_never_leak';
+const INVITE_TOKEN = 'gi_a_credential_that_must_never_leak';
 const INVITE_LINK = `https://app.example.test/connect-gateway?gateway=https%3A%2F%2Fgateway.example.test&invite=${INVITE_TOKEN}`;
 
 const MESSAGE: OutgoingMail = {
