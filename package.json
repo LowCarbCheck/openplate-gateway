@@ -1,6 +1,6 @@
 {
   "name": "openplate-gateway",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Share one AI provider key across a household or a hosted tier — an OpenAI-compatible proxy with per-member tokens, hard daily quotas, and no request-body logging.",
   "license": "MIT",
