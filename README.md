@@ -1,5 +1,12 @@
 # openplate-gateway
 
+**This repository is archived at 0.2.2 as of 2026-09-04.** Its AI proxy, daily quota and
+invite mail now live in [openplate-sync](https://github.com/LowCarbCheck/openplate-sync)
+0.6.0, the one server an openplate client talks to. Accounts are by email, an
+administrator invites people and manages them in the app at `/admin`, and a forgotten
+password is reset by a mailed link. Nothing in this repository receives further fixes. The
+last published image is `ghcr.io/lowcarbcheck/openplate-gateway:0.2.2`.
+
 Share one AI provider key across a household — or run a small hosted tier — without
 handing anyone the key.
 
